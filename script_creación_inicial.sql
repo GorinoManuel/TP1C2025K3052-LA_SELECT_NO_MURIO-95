@@ -24,3 +24,9 @@ nombre_localidad NVARCHAR(255),
 nro_provincia INT REFERENCES LA_SELECT_NO_MURIO.provincia
 )
 
+
+---- Crear Store Procedures para realizar la migracion -----
+
+
+
+---- Hacer la migracion ------
