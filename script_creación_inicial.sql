@@ -10,6 +10,18 @@ IF EXISTS (SELECT name FROM sys.tables WHERE name='localidad')
 DROP TABLE LA_SELECT_NO_MURIO.localidad
 GO
 
+IF EXISTS (SELECT name FROM sys.tables WHERE name='sucursal')
+DROP TABLE LA_SELECT_NO_MURIO.sucursal
+GO
+
+IF EXISTS (SELECT name FROM sys.tables WHERE name='compra')
+DROP TABLE LA_SELECT_NO_MURIO.compra
+GO
+
+IF EXISTS (SELECT name FROM sys.tables WHERE name='proveedor')
+DROP TABLE LA_SELECT_NO_MURIO.proveedor
+GO
+
 ------Elimino el schema preventivamente ----------
 IF EXISTS (SELECT name FROM sys.schemas WHERE name='LA_SELECT_NO_MURIO')
 DROP SCHEMA LA_SELECT_NO_MURIO
@@ -21,21 +33,21 @@ GO
 ----Creación de tablas ----
 CREATE TABLE LA_SELECT_NO_MURIO.provincia (
 nro_provincia INT IDENTITY PRIMARY KEY,
-nombre_provincia NVARCHAR(255)
+nombre_provincia NVARCHAR(255) NOT NULL
 )
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.localidad (
 nro_localidad INT IDENTITY PRIMARY KEY,
-nombre_localidad NVARCHAR(255),
-nro_provincia INT REFERENCES LA_SELECT_NO_MURIO.provincia
+nombre_localidad NVARCHAR(255) NOT NULL,
+nro_provincia INT REFERENCES LA_SELECT_NO_MURIO.provincia NOT NULL
 )
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.proveedor(
 razon_social_proveedor NVARCHAR(255) not null,
 cuit_proveedor NVARCHAR(255) not null,
-nro_localidad INT REFERENCES LA_SELECT_NO_MURIO.localidad,
+nro_localidad INT REFERENCES LA_SELECT_NO_MURIO.localidad NOT NULL,
 proveedor_direccion NVARCHAR(255) not null,
 proveedor_telefono NVARCHAR(255) not null,
 proveedor_mail NVARCHAR(255) not null,
@@ -45,7 +57,7 @@ GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.sucursal(
 nro_sucursal INT PRIMARY KEY IDENTITY,
-nro_localidad INT REFERENCES LA_SELECT_NO_MURIO.localidad,
+nro_localidad INT REFERENCES LA_SELECT_NO_MURIO.localidad NOT NULL,
 sucursal_direccion NVARCHAR(255) not null,
 sucursal_telefono NVARCHAR(255) not null,
 sucursal_mail NVARCHAR(255) not null,
@@ -73,7 +85,26 @@ material_precio DECIMAL(38,2) NOT NULL,
 )
 GO
 
+CREATE TABLE LA_SELECT_NO_MURIO.pedido(
+nro_pedido BIGINT PRIMARY KEY,
+codigo_cliente REFERENCES LA_SELECT_NO_MURIO.cliente,
 
+
+)
+GO
+
+SELECT DISTINCT Pedido_Numero, Pedido_Estado FROM gd_esquema.Maestra
+WHERE Pedido_Estado IS NOT NULL
+
+
+SELECT m1.Sucursal_NroSucursal, m1.Cliente_Dni 
+FROM gd_esquema.Maestra m1 JOIN gd_esquema.Maestra m2 ON 
+m1.Cliente_Dni = m2.Cliente_Dni AND m1.Sucursal_NroSucursal != m2.Sucursal_NroSucursal
+GO
+
+SELECT DISTINCT Pedido_numero, Pedido_Total FROM gd_esquema.Maestra
+WHERE Pedido_Total IS NULL
+GO
 
 ---- Crear Store Procedures para realizar la migracion -----
 CREATE PROCEDURE migrar_provincia
