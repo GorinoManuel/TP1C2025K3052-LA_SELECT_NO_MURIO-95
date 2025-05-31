@@ -32,6 +32,49 @@ nro_provincia INT REFERENCES LA_SELECT_NO_MURIO.provincia
 )
 GO
 
+CREATE TABLE LA_SELECT_NO_MURIO.proveedor(
+razon_social_proveedor NVARCHAR(255) not null,
+cuit_proveedor NVARCHAR(255) not null,
+nro_localidad INT REFERENCES LA_SELECT_NO_MURIO.localidad,
+proveedor_direccion NVARCHAR(255) not null,
+proveedor_telefono NVARCHAR(255) not null,
+proveedor_mail NVARCHAR(255) not null,
+PRIMARY KEY (razon_social_proveedor, cuit_proveedor)
+)
+GO
+
+CREATE TABLE LA_SELECT_NO_MURIO.sucursal(
+nro_sucursal INT PRIMARY KEY IDENTITY,
+nro_localidad INT REFERENCES LA_SELECT_NO_MURIO.localidad,
+sucursal_direccion NVARCHAR(255) not null,
+sucursal_telefono NVARCHAR(255) not null,
+sucursal_mail NVARCHAR(255) not null,
+)
+GO
+
+CREATE TABLE LA_SELECT_NO_MURIO.compra(
+nro_compra BIGINT PRIMARY KEY,
+nro_sucursal INT REFERENCES LA_SELECT_NO_MURIO.sucursal NOT NULL,
+razon_social_proveedor NVARCHAR(255) NOT NULL,
+cuit_proveedor NVARCHAR(255) NOT NULL,
+fecha_compra DATETIME2(6) NOT NULL,
+total_compra DECIMAL(18,2) NOT NULL,
+FOREIGN KEY(razon_social_proveedor, cuit_proveedor) REFERENCES
+LA_SELECT_NO_MURIO.proveedor
+)
+GO
+
+CREATE TABLE LA_SELECT_NO_MURIO.material(
+codigo_material INT PRIMARY KEY,
+material_tipo NVARCHAR(255) NOT NULL,
+material_nombre NVARCHAR(255) NOT NULL,
+material_descripcion NVARCHAR(255) NULL,
+material_precio DECIMAL(38,2) NOT NULL,
+)
+GO
+
+
+
 ---- Crear Store Procedures para realizar la migracion -----
 CREATE PROCEDURE migrar_provincia
 AS
