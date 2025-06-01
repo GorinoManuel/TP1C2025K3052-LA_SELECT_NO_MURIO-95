@@ -51,7 +51,7 @@ nro_localidad INT REFERENCES LA_SELECT_NO_MURIO.localidad NOT NULL,
 proveedor_direccion NVARCHAR(255) not null,
 proveedor_telefono NVARCHAR(255) not null,
 proveedor_mail NVARCHAR(255) not null,
-PRIMARY KEY (razon_social_proveedor, cuit_proveedor)
+PRIMARY KEY  (razon_social_proveedor, cuit_proveedor) 
 )
 GO
 
@@ -65,7 +65,7 @@ sucursal_mail NVARCHAR(255) not null,
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.compra(
-nro_compra BIGINT PRIMARY KEY,
+nro_compra DECIMAL(18, 0) IDENTITY PRIMARY KEY,
 nro_sucursal INT REFERENCES LA_SELECT_NO_MURIO.sucursal NOT NULL,
 razon_social_proveedor NVARCHAR(255) NOT NULL,
 cuit_proveedor NVARCHAR(255) NOT NULL,
@@ -77,7 +77,7 @@ LA_SELECT_NO_MURIO.proveedor
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.material(
-codigo_material INT PRIMARY KEY,
+codigo_material INT IDENTITY PRIMARY KEY,
 material_tipo NVARCHAR(255) NOT NULL,
 material_nombre NVARCHAR(255) NOT NULL,
 material_descripcion NVARCHAR(255) NULL,
@@ -85,26 +85,52 @@ material_precio DECIMAL(38,2) NOT NULL,
 )
 GO
 
-CREATE TABLE LA_SELECT_NO_MURIO.pedido(
-nro_pedido BIGINT PRIMARY KEY,
-codigo_cliente REFERENCES LA_SELECT_NO_MURIO.cliente,
-
-
+CREATE TABLE LA_SELECT_NO_MURIO.madera(
+codigo_madera INT IDENTITY PRIMARY KEY,
+codigo_material INT FOREIGN KEY REFERENCES LA_SELECT_NO_MURIO.material,
+color NVARCHAR(255),
+dureza NVARCHAR(255)
 )
 GO
 
-SELECT DISTINCT Pedido_Numero, Pedido_Estado FROM gd_esquema.Maestra
-WHERE Pedido_Estado IS NOT NULL
-
-
-SELECT m1.Sucursal_NroSucursal, m1.Cliente_Dni 
-FROM gd_esquema.Maestra m1 JOIN gd_esquema.Maestra m2 ON 
-m1.Cliente_Dni = m2.Cliente_Dni AND m1.Sucursal_NroSucursal != m2.Sucursal_NroSucursal
+CREATE TABLE LA_SELECT_NO_MURIO.tela(
+codigo_tela INT IDENTITY PRIMARY KEY,
+codigo_material INT FOREIGN KEY REFERENCES LA_SELECT_NO_MURIO.material,
+tela_color NVARCHAR(255),
+tela_textura NVARCHAR(255)
+)
 GO
 
-SELECT DISTINCT Pedido_numero, Pedido_Total FROM gd_esquema.Maestra
-WHERE Pedido_Total IS NULL
+CREATE TABLE LA_SELECT_NO_MURIO.relleno(
+codigo_relleno INT IDENTITY PRIMARY KEY,
+codigo_material INT FOREIGN KEY REFERENCES LA_SELECT_NO_MURIO.material,
+relleno_densidad DECIMAL(38,2)
+)
 GO
+
+
+CREATE TABLE LA_SELECT_NO_MURIO.cliente(
+cod_cliente BIGINT IDENTITY PRIMARY KEY,
+nro_localidad INT FOREIGN KEY REFERENCES LA_SELECT_NO_MURIO.localidad,
+cliente_dni BIGINT,
+cliente_nombre NVARCHAR(255),
+cliente_fecha_nacimiento DATETIME2(6),
+cliente_apellido NVARCHAR(255),
+cliente_mail NVARCHAR(255),
+cliente_direccion NVARCHAR(255)
+)
+GO
+
+CREATE TABLE LA_SELECT_NO_MURIO.pedido(
+nro_pedido BIGINT PRIMARY KEY IDENTITY,
+cod_cliente BIGINT REFERENCES LA_SELECT_NO_MURIO.cliente NOT NULL,
+nro_sucursal INT REFERENCES LA_SELECT_NO_MURIO.sucursal NOT NULL,
+pedido_fecha DATETIME2(6) NOT NULL,
+pedido_total DECIMAL(18, 2) NOT NULL
+)
+GO
+
+
 
 ---- Crear Store Procedures para realizar la migracion -----
 CREATE PROCEDURE migrar_provincia
