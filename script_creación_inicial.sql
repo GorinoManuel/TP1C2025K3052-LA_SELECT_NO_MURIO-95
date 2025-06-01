@@ -236,12 +236,12 @@ material_precio DECIMAL(38,2) NOT NULL,
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.detalle_compra(
+codigo_detalle_compra BIGINT PRIMARY KEY IDENTITY,
 codigo_material INT FOREIGN KEY REFERENCES LA_SELECT_NO_MURIO.material NOT NULL,
 nro_compra DECIMAL(18, 0) FOREIGN KEY REFERENCES LA_SELECT_NO_MURIO.compra NOT NULL,
 detalle_compra_precio DECIMAL(18, 2) NOT NULL,
 detalle_compra_cantidad DECIMAL(18, 0) NOT NULL,
 detalle_compra_subtotal DECIMAL(18, 2) NOT NULL,
-PRIMARY KEY (codigo_material, nro_compra)
 )
 
 CREATE TABLE LA_SELECT_NO_MURIO.madera(
@@ -453,7 +453,7 @@ AS
 		INSERT INTO LA_SELECT_NO_MURIO.compra(nro_compra, nro_sucursal, cod_proveedor, fecha_compra, total_compra)
 		SELECT DISTINCT m.Compra_Numero, m.Sucursal_NroSucursal, prov.cod_proveedor, m.Compra_Fecha, m.Compra_Total   FROM gd_esquema.Maestra m
 		JOIN LA_SELECT_NO_MURIO.proveedor prov ON m.Proveedor_Cuit = prov.cuit_proveedor AND m.Proveedor_RazonSocial = prov.razon_social_proveedor 
-		WHERE m.Proveedor_Cuit IS NOT NULL
+		WHERE m.Proveedor_Cuit IS NOT NULL AND m.Compra_Numero IS NOT NULL AND m.Sucursal_NroSucursal IS NOT NULL
 	END
 GO
 
@@ -538,13 +538,6 @@ AS
 		JOIN LA_SELECT_NO_MURIO.pedido p ON p.nro_pedido = m.Pedido_Numero
 		WHERE m.Pedido_Cancelacion_Fecha IS NOT NULL
 		AND m.Pedido_Cancelacion_Motivo IS NOT NULL
-		AND NOT EXISTS (
-            SELECT 1
-            FROM LA_SELECT_NO_MURIO.pedido_cancelacion AS pc
-            WHERE pc.nro_pedido = m.Pedido_Numero
-              AND pc.pedido_cancelacion_fecha = m.Pedido_Cancelacion_Fecha
-              AND pc.pedido_cancelacion_motivo = m.Pedido_Cancelacion_Motivo
-        );
 	END
 GO
 
@@ -626,11 +619,11 @@ BEGIN TRANSACTION
 	EXEC migrar_proveedor
 	EXEC migrar_cliente
 	EXEC migrar_compra
-	EXEC migrar_detalle_compra
 	EXEC migrar_material
 	EXEC migrar_madera
 	EXEC migrar_tela
 	EXEC migrar_relleno
+	EXEC migrar_detalle_compra
 	EXEC migrar_pedido
 	EXEC migrar_pedido_cancelacion
 	EXEC migrar_factura
