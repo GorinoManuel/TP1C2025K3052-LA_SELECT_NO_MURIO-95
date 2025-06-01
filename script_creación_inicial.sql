@@ -526,7 +526,6 @@ AS
 		SELECT DISTINCT m.Pedido_Numero, m.Sillon_Codigo, m.Detalle_Pedido_Cantidad, m.Detalle_Pedido_Precio, m.Detalle_Pedido_SubTotal FROM gd_esquema.Maestra m
 		WHERE m.Pedido_Numero IS NOT NULL AND m.Sillon_Codigo IS NOT NULL  AND m.Detalle_Pedido_Cantidad IS NOT NULL 
 		AND m.Detalle_Pedido_Precio IS NOT NULL AND m.Detalle_Pedido_SubTotal IS NOT NULL
-		ORDER BY m.Pedido_Numero
 	END
 GO
 
@@ -613,25 +612,31 @@ GO
 
 ---- Hacer la migracion ------
 BEGIN TRANSACTION
-	EXEC migrar_provincia
-	EXEC migrar_localidad
-	EXEC migrar_sucursal
-	EXEC migrar_proveedor
-	EXEC migrar_cliente
-	EXEC migrar_compra
-	EXEC migrar_material
-	EXEC migrar_madera
-	EXEC migrar_tela
-	EXEC migrar_relleno
-	EXEC migrar_detalle_compra
-	EXEC migrar_pedido
-	EXEC migrar_pedido_cancelacion
-	EXEC migrar_factura
-	EXEC migrar_sillon_medida
-	EXEC migrar_sillon_modelo
-	EXEC migrar_sillon
-	EXEC migrar_material_sillon
-	EXEC migrar_detalle_pedido
-	EXEC migrar_detalle_factura
-	EXEC migrar_envio
+	BEGIN TRY 
+		EXEC migrar_provincia
+		EXEC migrar_localidad
+		EXEC migrar_sucursal
+		EXEC migrar_proveedor
+		EXEC migrar_cliente
+		EXEC migrar_compra
+		EXEC migrar_material
+		EXEC migrar_madera
+		EXEC migrar_tela
+		EXEC migrar_relleno
+		EXEC migrar_detalle_compra
+		EXEC migrar_pedido
+		EXEC migrar_pedido_cancelacion
+		EXEC migrar_factura
+		EXEC migrar_sillon_medida
+		EXEC migrar_sillon_modelo
+		EXEC migrar_sillon
+		EXEC migrar_material_sillon
+		EXEC migrar_detalle_pedido
+		EXEC migrar_detalle_factura
+		EXEC migrar_envio
+	END TRY
+	BEGIN CATCH 
+		PRINT 'UPSSS, Hay un error en la migracion'
+		ROLLBACK TRANSACTION
+	END CATCH
 COMMIT TRANSACTION
