@@ -462,7 +462,7 @@ AS
 	BEGIN 
 		INSERT INTO LA_SELECT_NO_MURIO.detalle_compra(codigo_material,nro_compra,detalle_compra_precio, detalle_compra_cantidad, detalle_compra_subtotal)
 		SELECT DISTINCT mat.codigo_material, m.Compra_Numero, m.Detalle_Compra_Precio, m.Detalle_Compra_Cantidad, m.Detalle_Compra_SubTotal FROM gd_esquema.Maestra m
-		JOIN LA_SELECT_NO_MURIO.material mat ON m.Material_Tipo = mat.material_tipo
+		JOIN LA_SELECT_NO_MURIO.material mat ON m.Material_Tipo = mat.material_tipo and mat.material_descripcion = m.Material_Descripcion
 		WHERE m.Compra_Numero IS NOT NULL
 	END
 GO
@@ -482,7 +482,7 @@ AS
 		INSERT INTO LA_SELECT_NO_MURIO.madera(codigo_material, madera_color, madera_dureza)
 		SELECT DISTINCT material.codigo_material, m.Madera_color, m.Madera_dureza FROM gd_esquema.Maestra m
 		JOIN LA_SELECT_NO_MURIO.material AS material
-    	ON m.Material_Tipo = material.material_tipo
+    	ON m.Material_Tipo = material.material_tipo AND m.Material_Descripcion = material.material_descripcion
 		WHERE m.Material_Tipo = 'Madera'
 	END
 GO
@@ -493,7 +493,7 @@ AS
 		INSERT INTO LA_SELECT_NO_MURIO.tela(codigo_material, tela_color, tela_textura)
 		SELECT DISTINCT material.codigo_material, m.Tela_Color, m.tela_textura FROM gd_esquema.Maestra m
 		JOIN LA_SELECT_NO_MURIO.material AS material
-    	ON m.Material_Tipo = material.material_tipo
+    	ON m.Material_Tipo = material.material_tipo AND m.Material_Descripcion = material.material_descripcion
 		WHERE m.Material_Tipo = 'Tela'
 	END
 GO
@@ -504,7 +504,7 @@ AS
 		INSERT INTO LA_SELECT_NO_MURIO.relleno(codigo_material, relleno_densidad)
 		SELECT DISTINCT material.codigo_material, m.Relleno_Densidad FROM gd_esquema.Maestra m
 		JOIN LA_SELECT_NO_MURIO.material AS material
-    	ON m.Material_Tipo = material.material_tipo
+    	ON m.Material_Tipo = material.material_tipo AND m.Material_Descripcion = material.material_descripcion
 		WHERE m.Material_Tipo = 'Relleno'
 	END
 GO
@@ -554,9 +554,9 @@ CREATE PROCEDURE migrar_detalle_factura
 AS
 	BEGIN
 		INSERT INTO LA_SELECT_NO_MURIO.detalle_factura(nro_factura, detalle_factura_precio, detalle_factura_cantidad, nro_pedido, codigo_sillon, detalle_factura_subtotal) 
-		SELECT DISTINCT m.Factura_Numero, m.Detalle_Factura_Precio, m.Detalle_Factura_Cantidad, m.Pedido_Numero, m.Sillon_Codigo, m.Detalle_Factura_SubTotal FROM gd_esquema.Maestra m
-		JOIN LA_SELECT_NO_MURIO.detalle_pedido pe ON pe.nro_pedido = m.Pedido_Numero AND pe.codigo_sillon = m.Sillon_Codigo
-		WHERE m.Pedido_Numero IS NOT NULL AND Sillon_Codigo IS NOT NULL AND m.Factura_Numero IS NOT NULL
+		SELECT DISTINCT m.Factura_Numero, pe.precio_unitario, pe.cantidad, m.Pedido_Numero, pe.codigo_sillon, pe.subtotal FROM gd_esquema.Maestra m
+		JOIN LA_SELECT_NO_MURIO.detalle_pedido pe ON pe.nro_pedido = m.Pedido_Numero
+		WHERE  m.Factura_Numero IS NOT NULL
 	END
 GO
 
