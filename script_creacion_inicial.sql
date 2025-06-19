@@ -1,4 +1,4 @@
-USE GD1C2025
+﻿USE GD1C2025
 GO
 
 ------Eliminamos las tablas ya creadas ---------
@@ -460,10 +460,35 @@ GO
 CREATE PROCEDURE migrar_detalle_compra
 AS
 	BEGIN 
-		INSERT INTO LA_SELECT_NO_MURIO.detalle_compra(codigo_material,nro_compra,detalle_compra_precio, detalle_compra_cantidad, detalle_compra_subtotal)
-		SELECT DISTINCT mat.codigo_material, m.Compra_Numero, m.Detalle_Compra_Precio, m.Detalle_Compra_Cantidad, m.Detalle_Compra_SubTotal FROM gd_esquema.Maestra m
-		JOIN LA_SELECT_NO_MURIO.material mat ON m.Material_Tipo = mat.material_tipo and mat.material_descripcion = m.Material_Descripcion
-		WHERE m.Compra_Numero IS NOT NULL
+		WITH detalles_unicos AS (
+		SELECT *,
+			   ROW_NUMBER() OVER (
+					PARTITION BY Compra_Numero, Material_Descripcion, Detalle_Compra_SubTotal
+					ORDER BY Detalle_Compra_Precio DESC
+			   ) AS fila
+		FROM gd_esquema.Maestra
+		WHERE Compra_Numero IS NOT NULL
+		)
+		INSERT INTO LA_SELECT_NO_MURIO.detalle_compra(
+			codigo_material,
+			nro_compra,
+			detalle_compra_precio,
+			detalle_compra_cantidad,
+			detalle_compra_subtotal
+		)
+		SELECT 
+			mat.codigo_material,
+			du.Compra_Numero,
+			du.Detalle_Compra_Precio,
+			du.Detalle_Compra_Cantidad,
+			du.Detalle_Compra_SubTotal
+		FROM detalles_unicos du
+		JOIN LA_SELECT_NO_MURIO.material mat 
+			ON du.Material_Tipo = mat.material_tipo 
+			AND du.Material_Descripcion = mat.material_descripcion
+		JOIN LA_SELECT_NO_MURIO.compra c 
+			ON du.Compra_Numero = c.nro_compra
+		WHERE fila = 1
 	END
 GO
 
@@ -512,20 +537,59 @@ GO
 CREATE PROCEDURE migrar_pedido
 AS
 	BEGIN
-		INSERT INTO LA_SELECT_NO_MURIO.pedido(nro_pedido,nro_sucursal,pedido_fecha,pedido_total,cod_cliente, pedido_estado) 
-		SELECT DISTINCT m.Pedido_Numero,m.Sucursal_NroSucursal,m.Pedido_Fecha,m.Pedido_Total,cli.cod_cliente, m.Pedido_Estado FROM gd_esquema.Maestra m
-		JOIN LA_SELECT_NO_MURIO.cliente cli ON cli.cliente_dni = m.Cliente_Dni
-		WHERE m.Pedido_Numero IS NOT NULL
+		WITH pedidos_unicos AS (
+		SELECT *,
+			   ROW_NUMBER() OVER (
+					PARTITION BY Pedido_Numero
+					ORDER BY Pedido_Fecha DESC
+			   ) AS fila
+		FROM gd_esquema.Maestra
+		WHERE Pedido_Numero IS NOT NULL
+		)
+		INSERT INTO LA_SELECT_NO_MURIO.pedido(
+			nro_pedido,
+			nro_sucursal,
+			pedido_fecha,
+			pedido_total,
+			cod_cliente,
+			pedido_estado
+		)
+		SELECT 
+			pu.Pedido_Numero,
+			pu.Sucursal_NroSucursal,
+			pu.Pedido_Fecha,
+			pu.Pedido_Total,
+			cli.cod_cliente,
+			pu.Pedido_Estado
+		FROM pedidos_unicos pu
+		OUTER APPLY (
+			SELECT TOP 1 cod_cliente
+			FROM LA_SELECT_NO_MURIO.cliente cli
+			WHERE cli.cliente_dni = pu.Cliente_Dni
+		) cli
+		WHERE fila = 1 AND cli.cod_cliente IS NOT NULL
 	END
 GO
 
 CREATE PROCEDURE migrar_detalle_pedido
 AS
 	BEGIN
-		INSERT INTO LA_SELECT_NO_MURIO.detalle_pedido(nro_pedido,codigo_sillon,cantidad,precio_unitario,subtotal) 
-		SELECT DISTINCT m.Pedido_Numero, m.Sillon_Codigo, m.Detalle_Pedido_Cantidad, m.Detalle_Pedido_Precio, m.Detalle_Pedido_SubTotal FROM gd_esquema.Maestra m
-		WHERE m.Pedido_Numero IS NOT NULL AND m.Sillon_Codigo IS NOT NULL  AND m.Detalle_Pedido_Cantidad IS NOT NULL 
-		AND m.Detalle_Pedido_Precio IS NOT NULL AND m.Detalle_Pedido_SubTotal IS NOT NULL
+		INSERT INTO LA_SELECT_NO_MURIO.detalle_pedido(nro_pedido, codigo_sillon, cantidad, precio_unitario, subtotal) 
+		SELECT DISTINCT 
+			m.Pedido_Numero,
+			m.Sillon_Codigo,
+			m.Detalle_Pedido_Cantidad,
+			m.Detalle_Pedido_Precio,
+			m.Detalle_Pedido_SubTotal
+		FROM gd_esquema.Maestra m
+		JOIN LA_SELECT_NO_MURIO.pedido p ON m.Pedido_Numero = p.nro_pedido
+		JOIN LA_SELECT_NO_MURIO.sillon s ON m.Sillon_Codigo = s.codigo_sillon
+		WHERE 
+			m.Pedido_Numero IS NOT NULL 
+			AND m.Sillon_Codigo IS NOT NULL  
+			AND m.Detalle_Pedido_Cantidad IS NOT NULL 
+			AND m.Detalle_Pedido_Precio IS NOT NULL 
+			AND m.Detalle_Pedido_SubTotal IS NOT NULL
 	END
 GO
 
@@ -543,10 +607,35 @@ GO
 CREATE PROCEDURE migrar_factura
 AS
 	BEGIN
-		INSERT INTO LA_SELECT_NO_MURIO.factura(nro_factura, nro_sucursal, cod_cliente, factura_fecha, factura_total)
-		SELECT DISTINCT m.Factura_Numero, m.Sucursal_NroSucursal, cli.cod_cliente, m.Factura_Fecha, m.Factura_Total FROM gd_esquema.Maestra m
-		JOIN LA_SELECT_NO_MURIO.cliente cli ON cli.cliente_dni = m.Cliente_dni
-		WHERE m.Factura_Numero IS NOT NULL
+		WITH facturas_unicas AS (
+		SELECT *,
+			   ROW_NUMBER() OVER (
+					PARTITION BY Factura_Numero
+					ORDER BY Factura_Fecha DESC 
+			   ) AS fila
+		FROM gd_esquema.Maestra
+		WHERE Factura_Numero IS NOT NULL
+		)
+		INSERT INTO LA_SELECT_NO_MURIO.factura(
+			nro_factura,
+			nro_sucursal,
+			cod_cliente,
+			factura_fecha,
+			factura_total
+		)
+		SELECT 
+			fu.Factura_Numero,
+			fu.Sucursal_NroSucursal,
+			cli.cod_cliente,
+			fu.Factura_Fecha,
+			fu.Factura_Total
+		FROM facturas_unicas fu
+		OUTER APPLY (
+			SELECT TOP 1 cod_cliente
+			FROM LA_SELECT_NO_MURIO.cliente cli
+			WHERE cli.cliente_dni = fu.Cliente_Dni
+		) cli
+		WHERE fila = 1 AND cli.cod_cliente IS NOT NULL
 	END
 GO
 
@@ -595,8 +684,13 @@ CREATE PROCEDURE migrar_material_sillon
 AS
 	BEGIN
 		INSERT INTO LA_SELECT_NO_MURIO.material_sillon(codigo_sillon, codigo_material)
-		SELECT DISTINCT m.Sillon_Codigo, mat.codigo_material  FROM gd_esquema.Maestra m
-		JOIN LA_SELECT_NO_MURIO.material mat ON m.Material_Tipo = mat.material_tipo 
+		SELECT DISTINCT m.Sillon_Codigo, mat.codigo_material  
+		FROM gd_esquema.Maestra m
+		JOIN LA_SELECT_NO_MURIO.material mat 
+			ON m.Material_Tipo = mat.material_tipo 
+			AND m.Material_Descripcion = mat.material_descripcion
+		JOIN LA_SELECT_NO_MURIO.sillon s 
+			ON m.Sillon_Codigo = s.codigo_sillon
 		WHERE m.Sillon_Codigo IS NOT NULL
 	END
 GO
