@@ -115,8 +115,6 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Venta (
     id_cliente INT,
     id_tiempo INT,
     id_ubicacion INT,
-    id_turno INT,
-    id_material INT,
     id_sillon_modelo BIGINT,
     nro_sucursal BIGINT,
     cantidad INT,
@@ -125,8 +123,6 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Venta (
     FOREIGN KEY (id_cliente) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Cliente(id_cliente),
     FOREIGN KEY (id_tiempo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
     FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
-    FOREIGN KEY (id_turno) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Turno(id_turno),
-    FOREIGN KEY (id_material) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material(id_material),
     FOREIGN KEY (id_sillon_modelo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Modelo_Sillon(id_sillon_modelo),
     FOREIGN KEY (nro_sucursal) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Sucursal(nro_sucursal)
 );
@@ -151,7 +147,6 @@ GO
 CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Envios(
     id_fact_envios INT PRIMARY KEY,
 
-    id_pedido INT,
     id_ubicacion INT,
     id_cliente INT,
     id_tiempo_fecha_programada INT,
@@ -176,11 +171,13 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Pedidos (
     id_turnos INT,
     nro_sucursal BIGINT,
     cantidad_pedidos INT,
+    estado INT
     
     FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
     FOREIGN KEY (id_tiempo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
     FOREIGN KEY (id_turnos) REFERENCES  LA_SELECT_NO_MURIO.BI_Dim_Turno(id_turno),
-    FOREIGN KEY (nro_sucursal) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Sucursal(nro_sucursal)
+    FOREIGN KEY (nro_sucursal) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Sucursal(nro_sucursal),
+    FOREIGN KEY (estado) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Estado(id_estado)
 )
 GO
 /*Eliminar migraciones*/
@@ -193,6 +190,27 @@ AS
         INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Ubicacion (localidad, provincia)
         SELECT nombre_localidad, nombre_provincia FROM LA_SELECT_NO_MURIO.Localidad loc JOIN  LA_SELECT_NO_MURIO.provincia prov 
         ON prov.nro_provincia = loc.nro_provincia
+    END
+GO
+
+CREATE FUNCTION LA_SELECT_NO_MURIO.obtener_turno(@pedido_fecha DATETIME2(6))
+RETURNS NVARCHAR(40)
+AS     
+BEGIN           
+    RETURN (CASE 
+                WHEN DATEPART(HOUR, @pedido_fecha) <= 14  AND DATEPART(HOUR, @pedido_fecha) >= 8 THEN '08:00 - 14:00'
+                WHEN DATEPART(HOUR, @pedido_fecha) > 14  AND DATEPART(HOUR, @pedido_fecha) <= 20 THEN  '14:00 - 20:00'
+                END) 
+END
+GO
+
+CREATE FUNCTION LA_SELECT_NO_MURIO.obtener_cuatrimestre(@fecha DATETIME2(6))
+RETURNS INT 
+AS 
+    BEGIN
+        RETURN (CASE WHEN 1 <= MONTH(@fecha) AND MONTH(@fecha) <= 4 THEN 1
+                                        WHEN 5 <= MONTH(@fecha) AND MONTH(@fecha) <= 8 THEN 2
+                                        ELSE 3 END) 
     END
 GO
 
@@ -243,8 +261,9 @@ GO
 CREATE PROCEDURE BI_migrar_cliente
 AS
     BEGIN
-        INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Cliente (nombre, rango_etario)
+        INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Cliente (id_cliente, nombre, rango_etario)
         SELECT 
+            cli.cod_cliente,
             cli.cliente_nombre,
             LA_SELECT_NO_MURIO.getAgeRange(LA_SELECT_NO_MURIO.getAge(cli.cliente_fecha_nacimiento))
         FROM LA_SELECT_NO_MURIO.cliente cli
@@ -255,8 +274,8 @@ GO
 CREATE PROCEDURE BI_migrar_Tipo_Material
 AS
     BEGIN
-        INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material ( material_descripcion, material_tipo)
-        SELECT mat.material_descripcion, mat.material_tipo FROM LA_SELECT_NO_MURIO.Material mat
+        INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material ( id_material, material_descripcion, material_tipo)
+        SELECT mat.codigo_material, mat.material_descripcion, mat.material_tipo FROM LA_SELECT_NO_MURIO.Material mat
     END
 GO
 
@@ -264,10 +283,7 @@ CREATE PROCEDURE BI_migrar_turno
 AS
     BEGIN
         INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Turno (turno)
-        SELECT (CASE 
-                WHEN DATEPART(HOUR, ped.pedido_fecha) <= 14  AND DATEPART(HOUR, ped.pedido_fecha) >= 8 THEN '08:00 - 14:00'
-                WHEN DATEPART(HOUR, ped.pedido_fecha) > 14  AND DATEPART(HOUR, ped.pedido_fecha) <= 20 THEN  '14:00 - 20:00'
-                END) 
+        SELECT LA_SELECT_NO_MURIO.obtener_turno(ped.pedido_fecha)
         FROM LA_SELECT_NO_MURIO.pedido ped
     END
 GO
@@ -309,9 +325,7 @@ AS
         WHILE(@@FETCH_STATUS = 0)
             BEGIN
                 SET @Anio = YEAR(@Date)
-                SET @Cuatrimestre = (CASE WHEN 1 <= MONTH(@Date) AND MONTH(@Date) <= 4 THEN 1
-                                        WHEN 5 <= MONTH(@Date) AND MONTH(@Date) <= 8 THEN 2
-                                        ELSE 3 END) 
+                SET @Cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(@Date)
                 SET @Mes = MONTH(@Date)
                 SET @Dia = DAY(@Date)
 
@@ -346,9 +360,7 @@ AS
         WHILE(@@FETCH_STATUS = 0)
             BEGIN
                 SET @Anio = YEAR(@Date)
-                SET @Cuatrimestre = (CASE WHEN 1 <= MONTH(@Date) AND MONTH(@Date) <= 4 THEN 1
-                                        WHEN 5 <= MONTH(@Date) AND MONTH(@Date) <= 8 THEN 2
-                                        ELSE 3 END) 
+                SET @Cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(@Date)
                 SET @Mes = MONTH(@Date)
                 SET @Dia = DAY(@Date)
 
@@ -384,9 +396,7 @@ AS
         WHILE(@@FETCH_STATUS = 0)
             BEGIN
                 SET @Anio = YEAR(@Date)
-                SET @Cuatrimestre = (CASE WHEN 1 <= MONTH(@Date) AND MONTH(@Date) <= 4 THEN 1
-                                        WHEN 5 <= MONTH(@Date) AND MONTH(@Date) <= 8 THEN 2
-                                        ELSE 3 END) 
+                SET @Cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(@Date) 
                 SET @Mes = MONTH(@Date)
                 SET @Dia = DAY(@Date)
 
@@ -422,9 +432,7 @@ AS
         WHILE(@@FETCH_STATUS = 0)
             BEGIN
                 SET @Anio = YEAR(@Date)
-                SET @Cuatrimestre = (CASE WHEN 1 <= MONTH(@Date) AND MONTH(@Date) <= 4 THEN 1
-                                        WHEN 5 <= MONTH(@Date) AND MONTH(@Date) <= 8 THEN 2
-                                        ELSE 3 END) 
+                SET @Cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(@Date)
                 SET @Mes = MONTH(@Date)
                 SET @Dia = DAY(@Date)
 
@@ -434,9 +442,7 @@ AS
                 END
                 
                 SET @Anio = YEAR(@Fecha_Programada)
-                SET @Cuatrimestre = (CASE WHEN 1 <= MONTH(@Fecha_Programada) AND MONTH(@Fecha_Programada) <= 4 THEN 1
-                                        WHEN 5 <= MONTH(@Fecha_Programada) AND MONTH(@Fecha_Programada) <= 8 THEN 2
-                                        ELSE 3 END) 
+                SET @Cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(@Fecha_Programada)
                 SET @Mes = MONTH(@Fecha_Programada)
                 SET @Dia = DAY(@Fecha_Programada)
 
@@ -461,90 +467,88 @@ AS
     SELECT suc.nro_sucursal, suc.sucursal_direccion, suc.sucursal_mail, suc.sucursal_telefono FROM LA_SELECT_NO_MURIO.sucursal suc
     END
 GO
-/*
-CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Venta (
-    id_fact_ventas INT PRIMARY KEY IDENTITY(1,1),
 
-    id_cliente INT,
-    id_tiempo INT,
-    id_ubicacion INT,
-    id_turno INT,
-    id_material INT,
-    id_sillon_modelo BIGINT,
-    nro_sucursal BIGINT,
-    cantidad INT,
-    precio_promedio_venta DECIMAL(18,2)
-
-    FOREIGN KEY (id_cliente) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Cliente(id_cliente),
-    FOREIGN KEY (id_tiempo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
-    FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
-    FOREIGN KEY (id_turno) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Turno(id_turno),
-    FOREIGN KEY (id_material) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material(id_material),
-    FOREIGN KEY (id_sillon_modelo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Modelo_Sillon(id_sillon_modelo),
-    FOREIGN KEY (nro_sucursal) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Sucursal(nro_sucursal)
-);
-GO
-*/
-CREATE PROCEDURE BI_migrar_sucursales 
+CREATE PROCEDURE BI_migrar_ventas 
 AS
     BEGIN
-    INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Sucursal (nro_sucursal, sucursal_direccion, sucursal_mail, sucursal_telefono)
-    SELECT suc.nro_sucursal, suc.sucursal_direccion, suc.sucursal_mail, suc.sucursal_telefono FROM LA_SELECT_NO_MURIO.sucursal suc
+    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Venta (id_cliente, id_tiempo, id_ubicacion, id_sillon_modelo, nro_sucursal, cantidad, precio_promedio_venta)
+    SELECT dc.id_cliente, dt.id_tiempo,   (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
+        JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
+        JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.localidad = loc.nombre_localidad AND du.provincia = prov.nombre_provincia
+        WHERE suc.nro_sucursal = fac.nro_sucursal ),
+     s.codigo_sillon_modelo
+    , fac.nro_sucursal,
+    SUM(df.detalle_factura_cantidad), AVG(df.detalle_factura_precio)
+    FROM LA_SELECT_NO_MURIO.factura fac JOIN LA_SELECT_NO_MURIO.BI_Dim_Cliente dc ON fac.cod_cliente = dc.id_cliente
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(fac.factura_fecha) AND
+    dt.mes = MONTH(fac.factura_fecha) AND dt.dia = DAY(fac.factura_fecha) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(fac.factura_fecha)
+    JOIN LA_SELECT_NO_MURIO.detalle_factura df ON df.nro_factura = fac.nro_factura
+    JOIN LA_SELECT_NO_MURIO.sillon s ON s.codigo_sillon = df.codigo_sillon
+    GROUP BY dc.id_cliente, dt.id_tiempo, s.codigo_sillon_modelo, fac.nro_sucursal
     END
 GO
-/*
-CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Compras(
-    id_fact_compras INT PRIMARY KEY,
-    id_material INT,
-    id_tiempo INT,
-    id_ubicacion INT,
-    nro_sucursal BIGINT,
-    cantidad_compras INT,
-    promedio_precio_compras DECIMAL(18,2),
 
-    FOREIGN KEY (id_material) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material(id_material),
-    FOREIGN KEY (id_tiempo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
-    FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
-    FOREIGN KEY (nro_sucursal) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Sucursal(nro_sucursal)
-);
+CREATE PROCEDURE BI_migrar_compras
+AS
+    BEGIN
+    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Compras (id_material, id_tiempo, id_ubicacion, nro_sucursal, cantidad_compras, promedio_precio_compras)
+    SELECT dc.codigo_material, dt.id_tiempo,   (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
+        JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
+        JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.localidad = loc.nombre_localidad AND du.provincia = prov.nombre_provincia
+        WHERE suc.nro_sucursal = com.nro_sucursal ),
+    com.nro_sucursal,
+    SUM(dc.detalle_compra_cantidad), AVG(dc.detalle_compra_precio)
+    FROM LA_SELECT_NO_MURIO.compra com 
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(com.fecha_compra) AND
+    dt.mes = MONTH(com.fecha_compra) AND dt.dia = DAY(com.fecha_compra) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(com.fecha_compra)
+    JOIN LA_SELECT_NO_MURIO.detalle_compra dc ON dc.nro_compra = com.nro_compra
+    GROUP BY dc.codigo_material, dt.id_tiempo, dt.id_tiempo, com.nro_sucursal
+    END
 GO
 
-CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Envios(
-    id_fact_envios INT PRIMARY KEY,
-
-    id_pedido INT,
-    id_ubicacion INT,
-    id_cliente INT,
-    id_tiempo_fecha_programada INT,
-    id_tiempo_fecha_entrega INT,
-    nro_sucursal BIGINT,
-    importe_traslado DECIMAL(18, 2),
-    importe_subida DECIMAL(18, 2),
-    cantidad_envios_total INT,
-
-    FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
-    FOREIGN KEY (id_cliente) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Cliente(id_cliente),
-    FOREIGN KEY (id_tiempo_fecha_programada) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
-    FOREIGN KEY (id_tiempo_fecha_entrega) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
-    FOREIGN KEY (nro_sucursal) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Sucursal(nro_sucursal)
-);
+CREATE PROCEDURE BI_migrar_envios
+AS
+    BEGIN
+    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Envios (id_ubicacion, id_cliente, id_tiempo_fecha_entrega, id_tiempo_fecha_programada, nro_sucursal, importe_traslado, importe_subida)
+    SELECT (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
+        JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
+        JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.localidad = loc.nombre_localidad AND du.provincia = prov.nombre_provincia
+        WHERE fac.nro_sucursal = suc.nro_sucursal),
+    fac.cod_cliente, dt.id_tiempo, dtProg.id_tiempo,
+    fac.nro_sucursal, env.importe_traslado, env.importe_subida
+    FROM LA_SELECT_NO_MURIO.envio env
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(env.fecha_de_entrega) AND
+    dt.mes = MONTH(env.fecha_de_entrega) AND dt.dia = DAY(env.fecha_de_entrega) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(env.fecha_de_entrega)
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dtProg ON dtProg.anio = YEAR(env.fecha_programada) AND
+    dtProg.mes = MONTH(env.fecha_programada) AND dtProg.dia = DAY(env.fecha_programada) AND dtProg.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(env.fecha_programada)
+    JOIN LA_SELECT_NO_MURIO.factura fac ON  fac.nro_factura = env.nro_de_factura
+    GROUP BY fac.cod_cliente, dt.id_tiempo, dtProg.id_tiempo,
+    fac.nro_sucursal, env.importe_traslado, env.importe_subida
+    END
 GO
 
-CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Pedidos (
-    id_fact_pedidos INT PRIMARY KEY,
-    id_ubicacion INT,
-    id_tiempo INT,
-    id_turnos INT,
-    nro_sucursal BIGINT,
-    cantidad_pedidos INT,
-    
-    FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
-    FOREIGN KEY (id_tiempo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
-    FOREIGN KEY (id_turnos) REFERENCES  LA_SELECT_NO_MURIO.BI_Dim_Turno(id_turno),
-    FOREIGN KEY (nro_sucursal) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Sucursal(nro_sucursal)
-)
+CREATE PROCEDURE BI_migrar_pedidos
+AS
+    BEGIN
+    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Pedidos (id_ubicacion, id_tiempo, id_turnos, cantidad_pedidos, nro_sucursal, estado)
+    SELECT (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
+        JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
+        JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.localidad = loc.nombre_localidad AND du.provincia = prov.nombre_provincia
+        WHERE suc.nro_sucursal = ped.nro_sucursal),
+    dt.id_tiempo, tur.id_turno, COUNT(DISTINCT ped.nro_pedido), ped.nro_sucursal, est.id_estado
+    FROM LA_SELECT_NO_MURIO.pedido ped
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(ped.pedido_fecha) AND
+    dt.mes = MONTH(ped.pedido_fecha) AND dt.dia = DAY(ped.pedido_fecha) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(ped.pedido_fecha)
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Turno tur ON tur.turno = LA_SELECT_NO_MURIO.obtener_turno(ped.pedido_fecha) 
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Estado est ON est.estado_nombre = ped.pedido_estado
+    GROUP BY   dt.id_tiempo, tur.id_turno, ped.nro_sucursal
+    END
 GO
-*/
+
 
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_ganancias
@@ -626,6 +630,19 @@ AS
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON fc.id_tiempo = dt.id_tiempo
     GROUP BY dt.mes 
 GO
+
+CREATE VIEW LA_SELECT_NO_MURIO.vista_compras_por_tipo_material 
+AS
+    SELECT
+        dt.mes AS mes,
+        fc.promedio_precio_compras AS importe_promedio
+    FROM LA_SELECT_NO_MURIO.BI_Fact_Compras fc 
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON fc.id_tiempo = dt.id_tiempo
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material tm ON tm.id_material = fc.id_material
+    GROUP BY dt.mes 
+GO
+
+
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_porcentaje_cumplimiento_pedidos 
 AS
