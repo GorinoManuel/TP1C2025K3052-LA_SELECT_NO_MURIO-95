@@ -664,3 +664,22 @@ CREATE VIEW LA_SELECT_NO_MURIO.vista_mayor_costo_envio_localidades AS
     GROUP BY du.localidad
     ORDER BY AVG(fe.importe_traslado + fe.importe_subida) desc
 GO
+
+
+BEGIN TRANSACTION
+    EXEC BI_migrar_ubicacion
+    EXEC BI_migrar_cliente
+    EXEC BI_migrar_Tipo_Material
+    EXEC BI_migrar_turno
+    EXEC BI_migrar_modelo_sillon
+    EXEC BI_migrar_estado
+    EXEC BI_migrar_tiempos_compras
+    EXEC BI_migrar_tiempos_pedido
+    EXEC BI_migrar_tiempos_factura
+    EXEC BI_migrar_tiempos_envio
+    EXEC BI_migrar_sucursales
+    EXEC BI_migrar_ventas
+    EXEC BI_migrar_compras
+    EXEC BI_migrar_envios
+    EXEC BI_migrar_pedidos
+COMMIT TRANSACTION
