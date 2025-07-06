@@ -184,6 +184,10 @@ GO
 
 
 /*Migraciones */
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_ubicacion' )
+    DROP PROCEDURE BI_migrar_ubicacion
+GO
+
 CREATE PROCEDURE BI_migrar_ubicacion
 AS
     BEGIN
@@ -192,6 +196,7 @@ AS
         ON prov.nro_provincia = loc.nro_provincia
     END
 GO
+
 
 CREATE FUNCTION LA_SELECT_NO_MURIO.obtener_turno(@pedido_fecha DATETIME2(6))
 RETURNS NVARCHAR(40)
@@ -258,6 +263,11 @@ AS
 END
 GO
 
+
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_cliente' )
+    DROP PROCEDURE BI_migrar_cliente
+GO
+
 CREATE PROCEDURE BI_migrar_cliente
 AS
     BEGIN
@@ -271,12 +281,20 @@ AS
     END
 GO
 
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_Tipo_Material' )
+    DROP PROCEDURE BI_migrar_Tipo_Material
+GO
+
 CREATE PROCEDURE BI_migrar_Tipo_Material
 AS
     BEGIN
         INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material ( id_material, material_descripcion, material_tipo)
         SELECT mat.codigo_material, mat.material_descripcion, mat.material_tipo FROM LA_SELECT_NO_MURIO.Material mat
     END
+GO
+
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_turno' )
+    DROP PROCEDURE BI_migrar_turno
 GO
 
 CREATE PROCEDURE BI_migrar_turno
@@ -288,6 +306,10 @@ AS
     END
 GO
 
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_modelo_sillon' )
+    DROP PROCEDURE BI_migrar_modelo_sillon
+GO
+
 CREATE PROCEDURE BI_migrar_modelo_sillon
 AS
     BEGIN
@@ -295,6 +317,10 @@ AS
         SELECT sm.codigo_sillon_modelo, sm.sillon_modelo_nombre, sm.sillon_modelo_descripcion 
         FROM LA_SELECT_NO_MURIO.sillon_modelo sm
     END
+GO
+
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_estado' )
+    DROP PROCEDURE BI_migrar_estado
 GO
 
 CREATE PROCEDURE BI_migrar_estado
@@ -306,6 +332,10 @@ AS
     END
 GO
 
+
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_tiempos_compras' )
+    DROP PROCEDURE BI_migrar_tiempos_compras
+GO
 
 CREATE PROCEDURE BI_migrar_tiempos_compras
 AS
@@ -341,6 +371,9 @@ AS
     END
 GO
 
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_tiempos_pedido' )
+    DROP PROCEDURE BI_migrar_tiempos_pedido
+GO
 
 CREATE PROCEDURE BI_migrar_tiempos_pedido
 AS
@@ -377,6 +410,9 @@ AS
 GO
 
 
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_tiempos_factura' )
+    DROP PROCEDURE BI_migrar_tiempos_factura
+GO
 
 CREATE PROCEDURE BI_migrar_tiempos_factura
 AS
@@ -412,6 +448,9 @@ AS
     END
 GO
 
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_tiempos_envio' )
+    DROP PROCEDURE BI_migrar_tiempos_envio
+GO
 
 CREATE PROCEDURE BI_migrar_tiempos_envio
 AS
@@ -459,6 +498,9 @@ AS
     END
 GO
 
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_sucursales' )
+    DROP PROCEDURE BI_migrar_sucursales
+GO
 
 CREATE PROCEDURE BI_migrar_sucursales 
 AS
@@ -466,6 +508,10 @@ AS
     INSERT INTO LA_SELECT_NO_MURIO.BI_Dim_Sucursal (nro_sucursal, sucursal_direccion, sucursal_mail, sucursal_telefono)
     SELECT suc.nro_sucursal, suc.sucursal_direccion, suc.sucursal_mail, suc.sucursal_telefono FROM LA_SELECT_NO_MURIO.sucursal suc
     END
+GO
+
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_ventas' )
+    DROP PROCEDURE BI_migrar_ventas
 GO
 
 CREATE PROCEDURE BI_migrar_ventas 
@@ -489,6 +535,10 @@ AS
     END
 GO
 
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_compras' )
+    DROP PROCEDURE BI_migrar_compras
+GO
+
 CREATE PROCEDURE BI_migrar_compras
 AS
     BEGIN
@@ -506,6 +556,10 @@ AS
     JOIN LA_SELECT_NO_MURIO.detalle_compra dc ON dc.nro_compra = com.nro_compra
     GROUP BY dc.codigo_material, dt.id_tiempo, dt.id_tiempo, com.nro_sucursal
     END
+GO
+
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_envios' )
+    DROP PROCEDURE BI_migrar_envios
 GO
 
 CREATE PROCEDURE BI_migrar_envios
@@ -530,6 +584,10 @@ AS
     END
 GO
 
+IF EXISTS (SELECT name FROM sys.procedures WHERE name = 'BI_migrar_pedidos' )
+    DROP PROCEDURE BI_migrar_pedidos
+GO
+
 CREATE PROCEDURE BI_migrar_pedidos
 AS
     BEGIN
@@ -549,7 +607,9 @@ AS
     END
 GO
 
-
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_ganancias' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_ganancias
+GO
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_ganancias
 AS
@@ -560,6 +620,10 @@ AS
 	GROUP BY fv.nro_sucursal, dt.mes  
 GO     
 
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_facturacion_promedio_mensual' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_facturacion_promedio_mensual
+GO
+
 CREATE VIEW LA_SELECT_NO_MURIO.vista_facturacion_promedio_mensual 
 AS
     SELECT AVG(fv.precio_promedio_venta) 'Factura Promedio Mensual',  dt.cuatrimestre, dt.anio, du.provincia, fv.nro_sucursal 
@@ -567,6 +631,11 @@ AS
             JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.id_ubicacion = fv.id_ubicacion
     GROUP BY dt.cuatrimestre, dt.anio, du.provincia, fv.nro_sucursal 
 GO 
+
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_rendimiento_modelos' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_rendimiento_modelos
+GO
+
 -- Segun localidad y rango etario (top 3)
 CREATE VIEW LA_SELECT_NO_MURIO.vista_rendimiento_modelos
 AS
@@ -580,6 +649,10 @@ AS
     ORDER BY SUM(fv.precio_promedio_venta * fv.cantidad) desc
 GO        
 
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_volumen_pedidos' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_volumen_pedidos
+GO
+
 CREATE VIEW LA_SELECT_NO_MURIO.vista_volumen_pedidos
 AS
     SELECT dtur.turno, SUM(fp.cantidad_pedidos) 'volumen de pedidos', fp.nro_sucursal, dt.mes, dt.anio   
@@ -587,6 +660,10 @@ AS
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt  ON dt.id_tiempo=fp.id_tiempo
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Turno dtur ON dtur.id_turno = fp.id_turnos 
     GROUP BY fp.nro_sucursal, dt.mes, dt.anio, dtur.turno  
+GO
+
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_conversion_pedidos' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_conversion_pedidos
 GO
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_conversion_pedidos
@@ -602,23 +679,31 @@ AS
     GROUP BY fp.nro_sucursal, dt.cuatrimestre 
 GO
 
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_tiempo_promedio_fabricacion' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_tiempo_promedio_fabricacion
+GO
+
 -- Un pedido pendiente/cancelado no tiene que ser considerado aca
 CREATE VIEW LA_SELECT_NO_MURIO.vista_tiempo_promedio_fabricacion 
 AS
     SELECT
-        DATEDIFF(DAY, AVG(DATE(tiempo_pedido.anio, tiempo_pedido.mes, tiempo_pedido.dia)), AVG(DATE(tiempo_venta.anio, tiempo_venta.mes, tiempo_venta.dia)))),
+        AVG(DATEDIFF(DAY, CAST(tiempo_pedido.anio + tiempo_pedido.mes + tiempo_pedido.dia as date), CAST(tiempo_venta.anio + tiempo_venta.mes + tiempo_venta.dia as date))) Tiempopromedio,
         tiempo_pedido.cuatrimestre AS cuatrimestre,
         tiempo_pedido.anio AS anio
     FROM
-        BI_Fact_Pedidos AS pedidos
+        LA_SELECT_NO_MURIO.BI_Fact_Pedidos AS pedidos
     JOIN
-        BI_Dim_tiempo AS tiempo_pedido ON pedidos.id_tiempo = tiempo_pedido
-    UNION
-        BI_fact_ventas as ventas
+        LA_SELECT_NO_MURIO.BI_Dim_tiempo AS tiempo_pedido ON pedidos.id_tiempo = tiempo_pedido.id_tiempo
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Estado est ON est.id_estado = pedidos.estado 
+    JOIN LA_SELECT_NO_MURIO.BI_Fact_Venta as ventas ON pedidos. 
     JOIN
-        BI_Dim_tiempo AS tiempo_venta ON ventas.id_tiempo = tiempo_venta
-    WHERE BI_fact_pedido = "Entregado"
+        LA_SELECT_NO_MURIO.BI_Dim_tiempo AS tiempo_venta ON ventas.id_tiempo = tiempo_venta.id_tiempo
+    WHERE est.estado_nombre = 'ENTREGADO'
     GROUP BY tiempo_pedido.anio, tiempo_pedido.cuatrimestre
+GO
+
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_promedio_compras' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_promedio_compras
 GO
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_promedio_compras 
@@ -629,6 +714,10 @@ AS
     FROM LA_SELECT_NO_MURIO.BI_Fact_Compras fc 
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON fc.id_tiempo = dt.id_tiempo
     GROUP BY dt.mes 
+GO
+
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_compras_por_tipo_material' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_compras_por_tipo_material
 GO
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_compras_por_tipo_material 
@@ -642,7 +731,9 @@ AS
     GROUP BY dt.mes 
 GO
 
-
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_porcentaje_cumplimiento_pedidos' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_porcentaje_cumplimiento_pedidos
+GO
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_porcentaje_cumplimiento_pedidos 
 AS
@@ -653,6 +744,10 @@ AS
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON fe.id_tiempo_fecha_programada = dt.id_tiempo
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt_entrega ON fe.id_tiempo_fecha_entrega = dt_entrega.id_tiempo
     GROUP BY dt.mes
+GO
+
+IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_mayor_costo_envio_localidades' )
+    DROP VIEW LA_SELECT_NO_MURIO.vista_mayor_costo_envio_localidades
 GO
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_mayor_costo_envio_localidades AS 
