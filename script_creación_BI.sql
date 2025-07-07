@@ -2,6 +2,23 @@ USE GD1C2025
 GO
 
 /**/
+
+IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Fact_Venta')
+DROP TABLE LA_SELECT_NO_MURIO.BI_Fact_Venta
+GO
+
+IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Fact_Compras')
+DROP TABLE LA_SELECT_NO_MURIO.BI_Fact_Compras
+GO
+
+IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Fact_Pedidos')
+DROP TABLE LA_SELECT_NO_MURIO.BI_Fact_Pedidos
+GO
+
+IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Fact_Envios')
+DROP TABLE LA_SELECT_NO_MURIO.BI_Fact_Envios
+GO
+
 IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Dim_Turno')
 DROP TABLE LA_SELECT_NO_MURIO.BI_Dim_Turno
 GO
@@ -35,17 +52,7 @@ IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Dim_Sucursal')
 DROP TABLE LA_SELECT_NO_MURIO.BI_Dim_Sucursal
 GO
 
-IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Fact_Venta')
-DROP TABLE LA_SELECT_NO_MURIO.BI_Fact_Venta
-GO
 
-IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Fact_Compras')
-DROP TABLE LA_SELECT_NO_MURIO.BI_Fact_Compras
-GO
-
-IF EXISTS (SELECT name FROM sys.tables WHERE name='BI_Fact_Pedidos')
-DROP TABLE LA_SELECT_NO_MURIO.BI_Fact_Pedidos
-GO
 
 
 /* creación de tablas */
@@ -74,21 +81,21 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(--
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material(--
-    id_material INT IDENTITY PRIMARY KEY,
+    id_material INT PRIMARY KEY,
     material_descripcion NVARCHAR(255) NOT NULL,
     material_tipo NVARCHAR(255) NOT NULL
 );
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.BI_Dim_Modelo_Sillon(--
-    id_sillon_modelo BIGINT IDENTITY PRIMARY KEY,
+    id_sillon_modelo BIGINT PRIMARY KEY,
     sillon_modelo_nombre NVARCHAR(255) NOT NULL,
     sillon_modelo_descripcion NVARCHAR(255) NOT NULL
 );
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.BI_Dim_Cliente (--
-    id_cliente INT IDENTITY PRIMARY KEY,
+    id_cliente INT  PRIMARY KEY,
     nombre NVARCHAR(255) NOT NULL,
     rango_etario NVARCHAR(255) NOT NULL
 );
@@ -102,7 +109,7 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Dim_Estado(--
 GO
 
 CREATE TABLE LA_SELECT_NO_MURIO.BI_Dim_Sucursal(
-    nro_sucursal BIGINT IDENTITY PRIMARY KEY,
+    nro_sucursal BIGINT PRIMARY KEY,
     sucursal_direccion NVARCHAR(255) NOT NULL,
     sucursal_telefono NVARCHAR(255) NOT NULL,
     sucursal_mail NVARCHAR(255) NOT NULL
@@ -591,19 +598,19 @@ GO
 CREATE PROCEDURE BI_migrar_pedidos
 AS
     BEGIN
-    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Pedidos (id_ubicacion, id_tiempo, id_turnos, cantidad_pedidos, nro_sucursal, estado)
-    SELECT (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
-        JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
-        JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
-        JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.localidad = loc.nombre_localidad AND du.provincia = prov.nombre_provincia
-        WHERE suc.nro_sucursal = ped.nro_sucursal),
-    dt.id_tiempo, tur.id_turno, COUNT(DISTINCT ped.nro_pedido), ped.nro_sucursal, est.id_estado
-    FROM LA_SELECT_NO_MURIO.pedido ped
-    JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(ped.pedido_fecha) AND
-    dt.mes = MONTH(ped.pedido_fecha) AND dt.dia = DAY(ped.pedido_fecha) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(ped.pedido_fecha)
-    JOIN LA_SELECT_NO_MURIO.BI_Dim_Turno tur ON tur.turno = LA_SELECT_NO_MURIO.obtener_turno(ped.pedido_fecha) 
-    JOIN LA_SELECT_NO_MURIO.BI_Dim_Estado est ON est.estado_nombre = ped.pedido_estado
-    GROUP BY   dt.id_tiempo, tur.id_turno, ped.nro_sucursal
+        INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Pedidos (id_ubicacion, id_tiempo, id_turnos, cantidad_pedidos, nro_sucursal, estado)
+        SELECT (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
+            JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
+            JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
+            JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.localidad = loc.nombre_localidad AND du.provincia = prov.nombre_provincia
+            WHERE suc.nro_sucursal = ped.nro_sucursal),
+        dt.id_tiempo, tur.id_turno, COUNT(DISTINCT ped.nro_pedido), ped.nro_sucursal, est.id_estado
+        FROM LA_SELECT_NO_MURIO.pedido ped
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(ped.pedido_fecha) AND
+        dt.mes = MONTH(ped.pedido_fecha) AND dt.dia = DAY(ped.pedido_fecha) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(ped.pedido_fecha)
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_Turno tur ON tur.turno = LA_SELECT_NO_MURIO.obtener_turno(ped.pedido_fecha) 
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_Estado est ON est.estado_nombre = ped.pedido_estado
+        GROUP BY   dt.id_tiempo, tur.id_turno, ped.nro_sucursal,  est.id_estado
     END
 GO
 
@@ -713,7 +720,7 @@ AS
         fc.promedio_precio_compras AS importe_promedio
     FROM LA_SELECT_NO_MURIO.BI_Fact_Compras fc 
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON fc.id_tiempo = dt.id_tiempo
-    GROUP BY dt.mes 
+    GROUP BY dt.mes, fc.promedio_precio_compras
 GO
 
 IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_compras_por_tipo_material' )
@@ -728,7 +735,7 @@ AS
     FROM LA_SELECT_NO_MURIO.BI_Fact_Compras fc 
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON fc.id_tiempo = dt.id_tiempo
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material tm ON tm.id_material = fc.id_material
-    GROUP BY dt.mes 
+    GROUP BY dt.mes, fc.promedio_precio_compras
 GO
 
 IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_porcentaje_cumplimiento_pedidos' )
