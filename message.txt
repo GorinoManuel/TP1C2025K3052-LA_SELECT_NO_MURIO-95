@@ -1,0 +1,496 @@
+USE GD1C2025
+GO
+-------------------------------------------
+---------------- FUNCIONES ----------------
+-------------------------------------------
+
+-- fn: getAge(datetime2) -> obtiene la edad en años
+CREATE FUNCTION DATOSDEBASE.getAge(@dateofbirth datetime2(3)) 
+RETURNS int
+AS
+BEGIN
+    DECLARE @age int;
+    DECLARE @today DATE = GETDATE();
+	
+    SET @age = DATEDIFF(YEAR, @dateofbirth, @today)
+    IF (MONTH(@dateofbirth)>MONTH(GETDATE())) OR (MONTH(@dateofbirth) = MONTH(@today) AND DAY(@dateofbirth) > DAY(@today))
+	    SET @age = @age-1;
+
+    RETURN @age;
+END
+GO
+
+-- fn: obtener cuatrimestre
+CREATE FUNCTION DATOSDEBASE.ObtenerCuatrimestre (
+    @Fecha DATETIME
+)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @Cuatrimestre INT;
+
+    SET @Cuatrimestre = ((MONTH(@Fecha) - 1) / 4) + 1;
+
+    RETURN @Cuatrimestre;
+END
+GO
+
+
+-- fn: getAgeRange
+CREATE FUNCTION DATOSDEBASE.getAgeRange (@age int) --Recibe una edad por parámetro y 
+RETURNS varchar(10)								  --devuelve el rango de edad al que pertenece.	
+AS
+BEGIN
+	DECLARE @returnvalue varchar(10);
+	
+IF (@age < 25)
+BEGIN
+	SET @returnvalue = '< 25';
+END
+ELSE IF (@age BETWEEN 25 AND 35)
+BEGIN
+	SET @returnvalue = '25 - 35';
+END
+ELSE IF (@age between 35 AND 50)
+BEGIN
+	SET @returnvalue = '35 - 50';
+END
+ELSE IF(@age > 50)
+BEGIN
+	SET @returnvalue = '> 50';
+END
+
+	RETURN @returnvalue;
+END
+
+GO
+
+-- CREACION TABLAS --
+
+-------------------------------------------
+-------- TABLAS DE DIMENSIONES ------------
+-------------------------------------------
+
+CREATE TABLE DATOSDEBASE.BI_DIM_TIEMPO (
+    id_tiempo INT IDENTITY(1,1) PRIMARY KEY,
+    anio INT,
+    cuatrimestre INT,
+    mes INT
+);
+
+CREATE TABLE DATOSDEBASE.BI_DIM_UBICACION (
+    id_ubicacion INT IDENTITY(1,1) PRIMARY KEY,
+    provincia NVARCHAR(255),
+    localidad NVARCHAR(255),
+);
+
+CREATE TABLE DATOSDEBASE.BI_DIM_SUCURSAL (
+    id_sucursal INT IDENTITY(1,1) PRIMARY KEY,
+    nro_sucursal BIGINT
+);
+
+CREATE TABLE DATOSDEBASE.BI_DIM_TURNO (
+    id_turno INT IDENTITY(1,1) PRIMARY KEY,
+    rango NVARCHAR(100)
+);
+
+CREATE TABLE DATOSDEBASE.BI_DIM_RANGO_ETARIO (
+    id_rango_etario INT IDENTITY(1,1) PRIMARY KEY,
+    rango NVARCHAR(100)
+);
+
+CREATE TABLE DATOSDEBASE.BI_DIM_ESTADO_PEDIDO (
+    id_estado INT IDENTITY(1,1) PRIMARY KEY,
+    estado NVARCHAR(255)
+);
+
+CREATE TABLE DATOSDEBASE.BI_DIM_MATERIAL (
+    id_material INT IDENTITY(1,1) PRIMARY KEY,
+    tipo_material NVARCHAR(255)
+);
+
+CREATE TABLE DATOSDEBASE.BI_DIM_MODELO_SILLON (
+    id_modelo INT IDENTITY(1,1) PRIMARY KEY,
+    nombre_modelo NVARCHAR(255)
+);
+
+-------------------------------------------
+----------- TABLAS DE HECHOS --------------
+-------------------------------------------
+
+CREATE TABLE DATOSDEBASE.BI_FACT_PEDIDO (
+    id_estado INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_ESTADO_PEDIDO(id_estado),
+    id_sucursal INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_SUCURSAL(id_sucursal),
+    id_tiempo INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_TIEMPO(id_tiempo),
+    id_turno INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_TURNO(id_turno),
+    cantidad_pedidos INT,
+    tiempo_promedio DECIMAL(10,2) NULL,
+    PRIMARY KEY (id_estado, id_sucursal, id_tiempo, id_turno)
+);
+
+CREATE TABLE DATOSDEBASE.BI_FACT_ENVIO (
+    id_ubicacion INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_UBICACION(id_ubicacion),
+    id_tiempo_entrega INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_TIEMPO(id_tiempo),
+    porcentaje_cumplimiento DECIMAL(38, 2),
+    costo_envio DECIMAL(38, 2),
+    PRIMARY KEY (id_ubicacion, id_tiempo_entrega)
+);
+
+
+CREATE TABLE DATOSDEBASE.BI_FACT_VENTAS (
+    id_tiempo INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_TIEMPO(id_tiempo),
+    id_sucursal INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_SUCURSAL(id_sucursal),
+    id_rango_etario INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_RANGO_ETARIO(id_rango_etario),
+    id_modelo INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_MODELO_SILLON(id_modelo),
+    id_ubicacion INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_UBICACION(id_ubicacion),
+    total_venta DECIMAL(38, 2),
+    cantidad DECIMAL (18,0),
+    promedio_venta DECIMAL(38, 2),
+    PRIMARY KEY (id_tiempo, id_sucursal, id_rango_etario, id_modelo, id_ubicacion)
+);
+
+CREATE TABLE DATOSDEBASE.BI_FACT_COMPRAS (
+    id_tiempo INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_TIEMPO(id_tiempo),
+    id_sucursal INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_SUCURSAL(id_sucursal),
+    id_material INT FOREIGN KEY REFERENCES DATOSDEBASE.BI_DIM_MATERIAL(id_material),
+    promedio_compra DECIMAL(18, 2),
+    compra_material DECIMAL(18, 2),
+    total_compra DECIMAL(18, 2),
+);
+GO
+
+
+-------------------------------------------
+----------- CREACIÓN DE VISTAS ------------
+-------------------------------------------
+
+-- 1. Ganancias
+CREATE VIEW DATOSDEBASE.v_Ganancias as
+	select distinct
+	t.mes as 'Mes',
+	s.nro_sucursal as 'Número Sucursal',
+	SUM(v.promedio_venta*v.cantidad) - SUM(c.promedio_compra) as 'Ganancia'
+	from DATOSDEBASE.BI_FACT_VENTAS v
+	JOIN DATOSDEBASE.BI_FACT_COMPRAS c on c.id_sucursal = v.id_sucursal and c.id_tiempo = v.id_tiempo
+	JOIN DATOSDEBASE.BI_DIM_SUCURSAL s on v.id_sucursal = s.id_sucursal
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t on t.id_tiempo = v.id_tiempo
+	GROUP BY t.mes, s.nro_sucursal;
+GO
+-- 2. Factura Promedio Mensual
+CREATE VIEW DATOSDEBASE.v_FacturaPromedioMensual as
+	select distinct
+	t.anio as 'Año',
+	t.cuatrimestre as 'Cuatrimestre',
+	u.provincia as 'Provincia',
+	s.nro_sucursal as 'Número Sucursal',
+	SUM(v.total_venta)/SUM(v.cantidad) as 'Promedio de Venta'
+	from DATOSDEBASE.BI_FACT_VENTAS v
+	JOIN DATOSDEBASE.BI_DIM_SUCURSAL s on v.id_sucursal = s.id_sucursal
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t on t.id_tiempo = v.id_tiempo
+	JOIN DATOSDEBASE.BI_DIM_UBICACION u on u.id_ubicacion = v.id_ubicacion
+	group by t.anio, t.cuatrimestre, u.provincia, s.nro_sucursal;
+
+GO
+
+-- 3. Rendimiento de Modelos
+CREATE VIEW DATOSDEBASE.v_RendimientoModelos as
+WITH VentasConRanking AS (
+    SELECT
+        t.anio AS Año,
+        t.cuatrimestre AS Cuatrimestre,
+        u.localidad AS Localidad,
+        s.nro_sucursal AS [Número Sucursal],
+        r.rango AS [Rango Etario],
+        ms.nombre_modelo AS Modelo,
+        v.cantidad,
+        ROW_NUMBER() OVER (
+            PARTITION BY 
+                t.anio,
+                t.cuatrimestre,
+                u.localidad,
+                s.nro_sucursal,
+                r.rango
+            ORDER BY v.cantidad DESC
+        ) AS rn
+    FROM DATOSDEBASE.BI_FACT_VENTAS v
+    JOIN DATOSDEBASE.BI_DIM_SUCURSAL s ON v.id_sucursal = s.id_sucursal
+    JOIN DATOSDEBASE.BI_DIM_TIEMPO t ON t.id_tiempo = v.id_tiempo
+    JOIN DATOSDEBASE.BI_DIM_UBICACION u ON u.id_ubicacion = v.id_ubicacion
+    JOIN DATOSDEBASE.BI_DIM_RANGO_ETARIO r ON r.id_rango_etario = v.id_rango_etario
+    JOIN DATOSDEBASE.BI_DIM_MODELO_SILLON ms ON ms.id_modelo = v.id_modelo
+)
+SELECT
+    Año,
+    Cuatrimestre,
+    Localidad,
+    [Número Sucursal],
+    [Rango Etario],
+    Modelo
+FROM VentasConRanking
+WHERE rn <= 3
+GO
+
+-- 4. Volumen de Pedidos
+
+CREATE VIEW DATOSDEBASE.v_VolumenPedidos as
+	select distinct
+	t.anio as 'Año',
+	t.mes as 'Mes',
+	s.nro_sucursal as 'Número Sucursal',
+	tur.rango as 'Turno de venta',
+	SUM(p.cantidad_pedidos) as 'Volumen de Pedidos'
+	from DATOSDEBASE.BI_FACT_PEDIDO p
+	JOIN DATOSDEBASE.BI_DIM_SUCURSAL s on p.id_sucursal = s.id_sucursal
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t on t.id_tiempo = p.id_tiempo
+	JOIN DATOSDEBASE.BI_DIM_TURNO tur on tur.id_turno = p.id_turno
+	group by t.anio, t.mes, s.nro_sucursal, tur.rango;
+GO
+
+-- 5. Conversion de Pedidos
+CREATE VIEW DATOSDEBASE.v_ConversionPedidos as
+	select distinct
+	t.cuatrimestre as 'Cuatrimestre',
+	s.nro_sucursal as 'Número Sucursal',
+	ep.estado as 'Estado',
+	CAST(100.00 *SUM(p.cantidad_pedidos) / MAX(TotaleXCuatri.total) AS DECIMAL(10,2)) as 'Porcentaje Pedido'
+	from DATOSDEBASE.BI_FACT_PEDIDO p
+	JOIN DATOSDEBASE.BI_DIM_SUCURSAL s on p.id_sucursal = s.id_sucursal
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t on t.id_tiempo = p.id_tiempo
+	JOIN DATOSDEBASE.BI_DIM_ESTADO_PEDIDO ep on ep.id_estado = p.id_estado
+	JOIN (
+		select dim_suc.id_sucursal, t.cuatrimestre, count(*) as total
+	FROM DATOSDEBASE.Pedido p
+	JOIN DATOSDEBASE.Sucursal s ON s.idSucursal = p.idSucursal
+	JOIN DATOSDEBASE.BI_DIM_SUCURSAL dim_suc ON dim_suc.nro_sucursal = s.nroSucursal
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t ON t.anio = YEAR(p.Fecha_Hora) AND t.mes = MONTH(p.Fecha_Hora)
+	group by dim_suc.id_sucursal, t.cuatrimestre) as TotaleXCuatri on TotaleXCuatri.cuatrimestre = t.cuatrimestre and s.id_sucursal = TotaleXCuatri.id_sucursal
+	GROUP BY t.cuatrimestre, s.nro_sucursal, ep.estado;
+GO
+
+-- 6. Tiempo Promedio de Fabricación
+CREATE VIEW DATOSDEBASE.v_TiempoPromedioFabricacion as
+	select distinct
+	t.cuatrimestre as 'Cuatrimestre',
+	s.nro_sucursal as 'Número Sucursal',
+	AVG(p.tiempo_promedio) as 'Tiempo Promedio Horas'
+	from DATOSDEBASE.BI_FACT_PEDIDO p
+	JOIN DATOSDEBASE.BI_DIM_SUCURSAL s on p.id_sucursal = s.id_sucursal
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t on t.id_tiempo = p.id_tiempo
+	group by t.cuatrimestre, s.nro_sucursal;
+GO
+
+-- 7. Promedio de Compras
+CREATE VIEW DATOSDEBASE.v_PromedioCompras as
+	select distinct
+	t.mes as 'Mes',
+	AVG(c.promedio_compra) as 'Promedio de Compra'
+	from DATOSDEBASE.BI_FACT_COMPRAS c
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t on t.id_tiempo = c.id_tiempo
+    group by t.mes;
+GO
+
+-- 8. Compras por Tipo de Material
+CREATE VIEW DATOSDEBASE.v_ComprasTipoMaterial as
+	select distinct
+	t.cuatrimestre as 'Cuatrimestre',
+	s.nro_sucursal as 'Número Sucursal',
+	m.tipo_material as 'Tipo de Material',
+	SUM(c.compra_material) as 'Total Gastado'
+	from DATOSDEBASE.BI_FACT_COMPRAS c
+	JOIN DATOSDEBASE.BI_DIM_SUCURSAL s on c.id_sucursal = s.id_sucursal
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t on t.id_tiempo = c.id_tiempo
+	JOIN DATOSDEBASE.BI_DIM_MATERIAL m on m.id_material = c.id_material
+	group by t.cuatrimestre, s.nro_sucursal, m.tipo_material;
+GO
+
+-- 9. Porcentaje de cumplimiento de envíos
+CREATE VIEW DATOSDEBASE.v_PorcentajeCumplimientoEnvios as
+select distinct
+	t.mes as 'Mes',
+	CAST(AVG(e.porcentaje_cumplimiento) AS DECIMAL(38,2)) as 'Porcentaje de Cumplimiento'
+	from DATOSDEBASE.BI_FACT_ENVIO e
+	JOIN DATOSDEBASE.BI_DIM_TIEMPO t on t.id_tiempo = e.id_tiempo_entrega
+    GROUP BY t.mes;
+GO
+
+-- 10. Localidades que pagan mayor costo de envío
+CREATE VIEW DATOSDEBASE.v_LocalidadesMayorCostoEnvio as
+	select distinct TOP 3
+	u.localidad as 'Localidad',
+	SUM(e.costo_envio) as 'Costo de Envío'
+	from DATOSDEBASE.BI_FACT_ENVIO e
+	JOIN DATOSDEBASE.BI_DIM_UBICACION u on u.id_ubicacion = e.id_ubicacion
+	group by u.localidad
+	order by 'Costo de Envío' desc;
+	;
+GO
+
+
+-- POPULAR --
+
+-- DIMENSION TABLES
+
+-- MIGRAR TIEMPO (desde Factura, Pedido, Envío y Compra)
+WITH FechasUnificadas AS (
+    SELECT DISTINCT CAST(Fecha AS DATE) AS FechaBase FROM DATOSDEBASE.Factura WHERE Fecha IS NOT NULL
+    UNION
+    SELECT DISTINCT CAST(Fecha_Hora AS DATE) FROM DATOSDEBASE.Pedido WHERE Fecha_Hora IS NOT NULL
+    UNION
+    SELECT DISTINCT CAST(Fecha AS DATE) FROM DATOSDEBASE.Compra WHERE Fecha IS NOT NULL
+    UNION
+    SELECT DISTINCT CAST(Fecha_Entrega AS DATE) FROM DATOSDEBASE.Envio WHERE Fecha_Entrega IS NOT NULL
+)
+INSERT INTO DATOSDEBASE.BI_DIM_TIEMPO (anio, cuatrimestre, mes)
+SELECT 
+    YEAR(FechaBase) AS anio,
+    DATOSDEBASE.ObtenerCuatrimestre(FechaBase) AS cuatrimestre,
+    MONTH(FechaBase) AS mes
+FROM FechasUnificadas
+GROUP BY YEAR(FechaBase), DATOSDEBASE.ObtenerCuatrimestre(FechaBase), MONTH(FechaBase);
+
+--MIGRAR UBICACION
+INSERT INTO DATOSDEBASE.BI_DIM_UBICACION (provincia, localidad)
+SELECT DISTINCT p.Descripcion, l.Descripcion
+FROM DATOSDEBASE.Localidad l 
+JOIN DATOSDEBASE.Provincia p on p.idProvincia = l.idProvincia;
+
+--MIGRAR SUCURSAL
+INSERT INTO DATOSDEBASE.BI_DIM_SUCURSAL (nro_sucursal)
+SELECT DISTINCT s.nroSucursal
+FROM DATOSDEBASE.Sucursal s;
+
+-- MIGRAR TURNO (fijo)
+INSERT INTO DATOSDEBASE.BI_DIM_TURNO (rango)
+VALUES 
+    ('08:00 - 14:00'),
+    ('14:00 - 20:00');
+
+-- MIGRAR MATERIAL
+INSERT INTO DATOSDEBASE.BI_DIM_MATERIAL (tipo_material)
+SELECT DISTINCT Nombre
+FROM DATOSDEBASE.Tipo_Material
+WHERE Nombre IS NOT NULL;
+
+-- MIGRAR MODELO DE SILLON
+INSERT INTO DATOSDEBASE.BI_DIM_MODELO_SILLON (nombre_modelo)
+SELECT DISTINCT Nombre
+FROM DATOSDEBASE.Modelo
+WHERE Nombre IS NOT NULL;
+
+-- POPULAR RANGO ETARIO
+INSERT INTO DATOSDEBASE.BI_DIM_RANGO_ETARIO (rango)
+VALUES
+    ('< 25'),
+    ('25 - 35'),
+    ('35 - 50'),
+    ('> 50');
+
+-- POPULAR DIM_ESTADO_PEDIDO
+INSERT INTO DATOSDEBASE.BI_DIM_ESTADO_PEDIDO (estado) 
+SELECT DISTINCT ESTADO FROM DATOSDEBASE.Pedido WHERE ESTADO IS NOT NULL;
+
+-- POPULAR COMPRAS
+INSERT INTO DATOSDEBASE.BI_FACT_COMPRAS (id_tiempo, id_sucursal, id_material, promedio_compra, compra_material, total_compra)
+SELECT 
+	dim_t.id_tiempo,
+    dim_s.id_sucursal,
+	dim_m.id_material,
+	AVG(c.Total) as promedio_compra,
+    SUM(dc.Subtotal) as compra_material,
+	SUM(c.Total) as total_compra
+FROM DATOSDEBASE.Compra c
+JOIN DATOSDEBASE.Detalle_Compra dc ON dc.idCompra = c.idCompra
+JOIN DATOSDEBASE.Material m ON m.idMaterial = dc.idMaterial
+JOIN DATOSDEBASE.Tipo_Material tm ON tm.idTipo_Material = m.idTipo_Material
+JOIN DATOSDEBASE.Sucursal s ON s.idSucursal = c.idSucursal
+JOIN DATOSDEBASE.BI_DIM_SUCURSAL dim_s ON dim_s.nro_sucursal = s.nroSucursal
+JOIN DATOSDEBASE.BI_DIM_TIEMPO dim_t ON 
+    dim_t.anio = YEAR(c.fecha) AND 
+    dim_t.mes = MONTH(c.fecha) AND
+    dim_t.cuatrimestre = DATOSDEBASE.ObtenerCuatrimestre(c.fecha)
+JOIN DATOSDEBASE.BI_DIM_MATERIAL dim_m ON dim_m.tipo_material = tm.Nombre
+GROUP BY dim_t.id_tiempo, dim_s.id_sucursal, dim_m.id_material;
+
+
+--POPULAR VENTAS
+INSERT INTO DATOSDEBASE.BI_FACT_VENTAS (id_tiempo, id_sucursal, id_rango_etario, id_modelo, id_ubicacion, total_venta, cantidad, promedio_venta)
+SELECT DISTINCT
+    t.id_tiempo,
+    suc.id_sucursal,
+    re.id_rango_etario,
+	dim_sillon.id_modelo,
+	dim_ubi.id_ubicacion,
+	SUM(f.Total),
+	count(distinct f.nroFactura),
+	AVG(f.total)
+FROM DATOSDEBASE.Factura f
+JOIN DATOSDEBASE.Cliente c ON c.idCliente = f.idCliente
+JOIN DATOSDEBASE.Detalle_Factura df ON df.idFactura = f.idFactura 
+JOIN DATOSDEBASE.Detalle_Pedido dp ON dp.idDetalle_Pedido = df.idDetalle_Pedido
+JOIN DATOSDEBASE.Sillon sil ON sil.idSillon = dp.idSillon
+JOIN DATOSDEBASE.Modelo m ON m.idModelo = sil.idModelo
+JOIN DATOSDEBASE.Sucursal s ON s.idSucursal = f.idSucursal
+JOIN DATOSDEBASE.BI_DIM_MODELO_SILLON dim_sillon on dim_sillon.nombre_modelo = m.Nombre
+JOIN DATOSDEBASE.BI_DIM_SUCURSAL suc ON suc.nro_sucursal = s.nroSucursal
+JOIN DATOSDEBASE.Localidad l ON l.idLocalidad = s.idLocalidad
+JOIN DATOSDEBASE.Provincia p ON l.idProvincia = p.idProvincia
+JOIN DATOSDEBASE.BI_DIM_UBICACION dim_ubi ON dim_ubi.provincia = p.Descripcion and dim_ubi.localidad = l.Descripcion
+JOIN DATOSDEBASE.BI_DIM_TIEMPO t ON t.anio = YEAR(f.Fecha) AND t.mes = MONTH(f.Fecha) and t.cuatrimestre = DATOSDEBASE.ObtenerCuatrimestre(f.fecha)
+JOIN DATOSDEBASE.BI_DIM_RANGO_ETARIO re ON 
+    re.rango = DATOSDEBASE.getAgeRange(DATOSDEBASE.getAge(c.Fecha_Nacimiento))
+GROUP BY    t.id_tiempo,
+    suc.id_sucursal,
+    re.id_rango_etario,
+	dim_sillon.id_modelo,
+	dim_ubi.id_ubicacion
+	order by id_tiempo asc;
+
+-- POPULAR PEDIDO
+INSERT INTO DATOSDEBASE.BI_FACT_PEDIDO (id_estado, id_sucursal, id_tiempo, id_turno, cantidad_pedidos, tiempo_promedio)
+SELECT 
+    ep.id_estado,
+    suc.id_sucursal,
+    t.id_tiempo,
+    tu.id_turno,
+	COUNT(distinct p.nroPedido) as cantidad_pedidos,    
+    AVG(DATEDIFF(HOUR, p.Fecha_Hora, COALESCE(f.Fecha, p.Fecha_Hora))) as tiempo_promedio
+FROM DATOSDEBASE.Pedido p
+LEFT JOIN DATOSDEBASE.Detalle_Pedido dp ON dp.idPedido = p.idPedido
+LEFT JOIN DATOSDEBASE.Detalle_Factura df ON df.idDetalle_Pedido = dp.idDetalle_Pedido
+LEFT JOIN DATOSDEBASE.Factura f on f.idFactura = df.idFactura
+JOIN DATOSDEBASE.Sucursal s ON s.idSucursal = p.idSucursal
+JOIN DATOSDEBASE.BI_DIM_ESTADO_PEDIDO ep ON ep.estado = p.Estado
+JOIN DATOSDEBASE.BI_DIM_SUCURSAL suc ON suc.nro_sucursal = s.nroSucursal
+JOIN DATOSDEBASE.BI_DIM_TIEMPO t ON t.anio = YEAR(p.Fecha_Hora) AND t.mes = MONTH(p.Fecha_Hora) and t.cuatrimestre = DATOSDEBASE.ObtenerCuatrimestre(p.Fecha_Hora)
+JOIN DATOSDEBASE.BI_DIM_TURNO tu ON 
+    tu.rango = CASE 
+        WHEN DATEPART(HOUR, p.Fecha_Hora) BETWEEN 8 AND 14 THEN '08:00 - 14:00'
+        WHEN DATEPART(HOUR, p.Fecha_Hora) BETWEEN 14 AND 20 THEN '14:00 - 20:00'
+    END
+GROUP BY ep.id_estado, suc.id_sucursal, t.id_tiempo, tu.id_turno;
+
+
+-- POPULAR ENVIOS
+INSERT INTO DATOSDEBASE.BI_FACT_ENVIO (id_tiempo_entrega, id_ubicacion, costo_envio, porcentaje_cumplimiento)
+SELECT DISTINCT
+
+dim_t.id_tiempo,
+dim_ubi.id_ubicacion,
+SUM(e.Total),
+100.0 * SUM(CASE 
+                   WHEN e.Fecha_Entrega <= e.Fecha_Programada THEN 1 
+                   ELSE 0 
+               END) / COUNT(*) AS Porcentaje_Cumplimiento
+FROM DATOSDEBASE.Envio e
+JOIN DATOSDEBASE.Factura f ON e.idFactura = f.idFactura
+JOIN DATOSDEBASE.Cliente c ON c.idCliente = f.idCliente
+JOIN DATOSDEBASE.Localidad l ON l.idLocalidad = c.idLocalidad
+JOIN DATOSDEBASE.Provincia p ON l.idProvincia = p.idProvincia
+JOIN DATOSDEBASE.BI_DIM_UBICACION dim_ubi ON dim_ubi.provincia = p.Descripcion and dim_ubi.localidad = l.Descripcion
+JOIN DATOSDEBASE.BI_DIM_TIEMPO dim_t ON 
+	dim_t.anio = YEAR(e.Fecha_Entrega) 
+	AND dim_t.mes = MONTH(e.Fecha_Entrega) 
+	and dim_t.cuatrimestre = DATOSDEBASE.ObtenerCuatrimestre(e.Fecha_Entrega)
+
+GROUP BY dim_t.id_tiempo,
+dim_ubi.id_ubicacion;
