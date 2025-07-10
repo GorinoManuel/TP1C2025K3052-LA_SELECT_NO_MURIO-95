@@ -699,7 +699,7 @@ CREATE PROCEDURE migrar_envio
 AS
 	BEGIN
 		INSERT INTO LA_SELECT_NO_MURIO.envio(nro_de_envio, nro_de_factura, fecha_programada, fecha_de_entrega, importe_traslado, importe_subida)
-		SELECT DISTINCT m.Envio_Numero, m.Factura_Numero, m.Envio_Fecha_Programada, m.Factura_Fecha, m.Envio_ImporteTraslado, m.Envio_importeSubida FROM gd_esquema.Maestra m
+		SELECT DISTINCT m.Envio_Numero, m.Factura_Numero, m.Envio_Fecha_Programada, m.Envio_Fecha , m.Envio_ImporteTraslado, m.Envio_importeSubida FROM gd_esquema.Maestra m
 		WHERE m.Envio_Numero IS NOT NULL
 	END
 GO

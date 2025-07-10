@@ -157,10 +157,9 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Envios(
     id_cliente INT,
     id_tiempo_fecha_entrega INT,
     nro_sucursal BIGINT,
-    importe_traslado DECIMAL(18, 2),
-    importe_subida DECIMAL(18, 2),
     cantidad_envios_total INT,
-    porcentaje_cumplido_mes DECIMAL(38, 2)
+    porcentaje_cumplido_mes DECIMAL(38, 2),
+    costo_total_envio DECIMAL(18, 2)
 
     FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
     FOREIGN KEY (id_cliente) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Cliente(id_cliente),
@@ -563,7 +562,7 @@ GO
 CREATE OR ALTER PROCEDURE BI_migrar_envios
 AS
     BEGIN
-    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Envios (id_ubicacion, id_cliente, id_tiempo_fecha_entrega, porcentaje_cumplido_mes, nro_sucursal, importe_traslado, importe_subida)
+    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Envios (id_ubicacion, id_cliente, id_tiempo_fecha_entrega, porcentaje_cumplido_mes, nro_sucursal, costo_total_envio)
     SELECT (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
         JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
         JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
@@ -573,14 +572,14 @@ AS
                    WHEN env.fecha_de_entrega <= env.fecha_programada THEN 1 
                    ELSE 0 
                END) / COUNT(*),
-    fac.nro_sucursal, env.importe_traslado, env.importe_subida
+    fac.nro_sucursal, SUM( env.importe_traslado + env.importe_subida)
     
     FROM LA_SELECT_NO_MURIO.envio env
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(env.fecha_de_entrega) AND
     dt.mes = MONTH(env.fecha_de_entrega) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(env.fecha_de_entrega)
     JOIN LA_SELECT_NO_MURIO.factura fac ON  fac.nro_factura = env.nro_de_factura
     GROUP BY fac.cod_cliente, dt.id_tiempo,
-    fac.nro_sucursal, env.importe_traslado, env.importe_subida
+    fac.nro_sucursal
     END
 GO
 
@@ -768,11 +767,11 @@ GO
 CREATE VIEW LA_SELECT_NO_MURIO.vista_mayor_costo_envio_localidades AS 
     SELECT TOP 3
         du.localidad AS localidad,
-        AVG(fe.importe_traslado + fe.importe_subida) AS promedio_costo_envio
+        AVG(fe.costo_total_envio) AS promedio_costo_envio
     FROM LA_SELECT_NO_MURIO.BI_Fact_Envios fe
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON fe.id_ubicacion = du.id_ubicacion
     GROUP BY du.localidad
-    ORDER BY AVG(fe.importe_traslado + fe.importe_subida) desc
+    ORDER BY AVG(fe.costo_total_envio) desc
 GO
 --OK
 
