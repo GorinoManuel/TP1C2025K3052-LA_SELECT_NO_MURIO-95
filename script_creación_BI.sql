@@ -124,6 +124,7 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Venta (
     id_sillon_modelo BIGINT,
     nro_sucursal BIGINT,
     cantidad INT,
+    cantidad_facturas INT, 
     precio_promedio_venta DECIMAL(18,2),
 
     FOREIGN KEY (id_cliente) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Cliente(id_cliente),
@@ -156,15 +157,13 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Envios(
     id_ubicacion INT,
     id_cliente INT,
     id_tiempo_fecha_entrega INT,
-    nro_sucursal BIGINT,
     cantidad_envios_total INT,
     porcentaje_cumplido_mes DECIMAL(38, 2),
     costo_total_envio DECIMAL(18, 2)
 
     FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
     FOREIGN KEY (id_cliente) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Cliente(id_cliente),
-    FOREIGN KEY (id_tiempo_fecha_entrega) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
-    FOREIGN KEY (nro_sucursal) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Sucursal(nro_sucursal)
+    FOREIGN KEY (id_tiempo_fecha_entrega) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo)
 );
 GO
 
@@ -177,6 +176,7 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Pedidos (
     cantidad_pedidos INT,
     estado INT,
     tiempo_promedio_dia DECIMAL(10,2)
+    
     
     FOREIGN KEY (id_ubicacion) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Ubicacion(id_ubicacion),
     FOREIGN KEY (id_tiempo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
@@ -514,7 +514,7 @@ GO
 CREATE PROCEDURE BI_migrar_ventas 
 AS
     BEGIN
-    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Venta (id_cliente, id_tiempo, id_ubicacion, id_sillon_modelo, nro_sucursal, cantidad, precio_promedio_venta)
+    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Venta (id_cliente, id_tiempo, id_ubicacion, id_sillon_modelo, nro_sucursal, cantidad, cantidad_facturas, precio_promedio_venta)
     SELECT dc.id_cliente, dt.id_tiempo,   (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
         JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
         JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
@@ -522,7 +522,7 @@ AS
         WHERE suc.nro_sucursal = fac.nro_sucursal ),
      s.codigo_sillon_modelo
     , fac.nro_sucursal,
-    SUM(df.detalle_factura_cantidad), (SUM(df.detalle_factura_precio * dF.detalle_factura_cantidad) / SUM(df.detalle_factura_cantidad))
+    SUM(df.detalle_factura_cantidad), COUNT(DISTINCT fac.nro_factura ), (SUM(df.detalle_factura_precio * dF.detalle_factura_cantidad) / SUM(df.detalle_factura_cantidad))
     FROM LA_SELECT_NO_MURIO.factura fac JOIN LA_SELECT_NO_MURIO.BI_Dim_Cliente dc ON fac.cod_cliente = dc.id_cliente
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(fac.factura_fecha) AND
     dt.mes = MONTH(fac.factura_fecha)  AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(fac.factura_fecha)
@@ -562,24 +562,21 @@ GO
 CREATE OR ALTER PROCEDURE BI_migrar_envios
 AS
     BEGIN
-    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Envios (id_ubicacion, id_cliente, id_tiempo_fecha_entrega, porcentaje_cumplido_mes, nro_sucursal, costo_total_envio)
-    SELECT (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
-        JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
+    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Envios (id_ubicacion, id_cliente, id_tiempo_fecha_entrega, porcentaje_cumplido_mes, costo_total_envio)
+    SELECT (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.cliente cli
+        JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = cli.nro_localidad 
         JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
         JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.localidad = loc.nombre_localidad AND du.provincia = prov.nombre_provincia
-        WHERE fac.nro_sucursal = suc.nro_sucursal),
+        WHERE fac.cod_cliente = cli.cod_cliente),
     fac.cod_cliente, dt.id_tiempo, 100.0 * SUM(CASE 
                    WHEN env.fecha_de_entrega <= env.fecha_programada THEN 1 
                    ELSE 0 
-               END) / COUNT(*),
-    fac.nro_sucursal, SUM( env.importe_traslado + env.importe_subida)
-    
+               END) / COUNT(*), SUM( env.importe_traslado + env.importe_subida)
     FROM LA_SELECT_NO_MURIO.envio env
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(env.fecha_de_entrega) AND
     dt.mes = MONTH(env.fecha_de_entrega) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(env.fecha_de_entrega)
     JOIN LA_SELECT_NO_MURIO.factura fac ON  fac.nro_factura = env.nro_de_factura
-    GROUP BY fac.cod_cliente, dt.id_tiempo,
-    fac.nro_sucursal
+    GROUP BY fac.cod_cliente, dt.id_tiempo
     END
 GO
 
@@ -613,10 +610,10 @@ GO
 
 CREATE OR ALTER VIEW LA_SELECT_NO_MURIO.vista_ganancias
 AS
-    SELECT fv.nro_sucursal,  dt.mes, (SUM(fv.precio_promedio_venta*fv.cantidad)-SUM(fc.cantidad_compras*fc.promedio_precio_compras)) 'Ganancias'
+    SELECT fv.nro_sucursal,  dt.mes, (SUM(fv.precio_promedio_venta*fv.cantidad)-SUM(fc.promedio_precio_compras)) 'Ganancias'
 	FROM LA_SELECT_NO_MURIO.BI_Fact_Venta fv JOIN LA_SELECT_NO_MURIO.BI_Fact_Compras fc ON fv.nro_sucursal = fc.nro_sucursal  and FC.id_tiempo = fv.id_tiempo
 											JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.id_tiempo = fv.id_tiempo 
-	GROUP BY fv.nro_sucursal, dt.mes  
+	GROUP BY fv.nro_sucursal, dt.mes
 GO     
 
 
@@ -626,7 +623,7 @@ GO
 
 CREATE VIEW LA_SELECT_NO_MURIO.vista_facturacion_promedio_mensual 
 AS
-    SELECT AVG(fv.precio_promedio_venta) 'Factura Promedio Mensual',  dt.cuatrimestre, dt.anio, du.provincia, fv.nro_sucursal 
+    SELECT SUM(fv.precio_promedio_venta * fv.cantidad) / SUM(fv.cantidad_facturas) 'Facturacion Promedio Mensual',  dt.cuatrimestre, dt.anio, du.provincia, fv.nro_sucursal 
     FROM LA_SELECT_NO_MURIO.BI_Fact_Venta fv JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.id_tiempo = fv.id_tiempo
             JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.id_ubicacion = fv.id_ubicacion
     GROUP BY dt.cuatrimestre, dt.anio, du.provincia, fv.nro_sucursal 
@@ -678,10 +675,11 @@ AS
             JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt2  ON dt2.id_tiempo=fp2.id_tiempo
             WHERE dt2.cuatrimestre = dt.cuatrimestre AND FP2.nro_sucursal = fp.nro_sucursal
             )) '% Conversion_pedidos',
-            fp.nro_sucursal, dt.cuatrimestre, fp.estado
+            fp.nro_sucursal, dt.cuatrimestre, est.estado_nombre
     FROM LA_SELECT_NO_MURIO.BI_Fact_Pedidos fp 
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt  ON dt.id_tiempo=fp.id_tiempo
-    GROUP BY fp.nro_sucursal, dt.cuatrimestre, fp.estado 
+    JOIN LA_SELECT_NO_MURIO.BI_Dim_Estado est ON fp.estado = est.id_estado
+    GROUP BY fp.nro_sucursal, dt.cuatrimestre, est.estado_nombre
 GO
 
 
