@@ -55,7 +55,7 @@ GO
 
 
 
-/* creación de tablas */
+/* creaci�n de tablas */
 
 
 CREATE TABLE LA_SELECT_NO_MURIO.BI_Dim_Turno(--
@@ -143,6 +143,7 @@ CREATE TABLE LA_SELECT_NO_MURIO.BI_Fact_Compras(
     nro_sucursal BIGINT,
     cantidad_compras INT,
     promedio_precio_compras DECIMAL(18,2),
+    importe_total_material DECIMAL(18,2)
 
     FOREIGN KEY (id_material) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material(id_material),
     FOREIGN KEY (id_tiempo) REFERENCES LA_SELECT_NO_MURIO.BI_Dim_Tiempo(id_tiempo),
@@ -224,7 +225,7 @@ AS
     END
 GO
 
-CREATE OR ALTER FUNCTION LA_SELECT_NO_MURIO.getAge(@dateofbirth datetime2(6)) --Recibe una fecha de nacimiento por parámetro
+CREATE OR ALTER FUNCTION LA_SELECT_NO_MURIO.getAge(@dateofbirth datetime2(6)) --Recibe una fecha de nacimiento por par�metro
 RETURNS int													 --Y devuelve la edad actual de la persona.
 AS
     BEGIN
@@ -243,7 +244,7 @@ AS
 GO
 
 
-CREATE OR ALTER FUNCTION LA_SELECT_NO_MURIO.getAgeRange (@age int) --Recibe una edad por parámetro y 
+CREATE OR ALTER FUNCTION LA_SELECT_NO_MURIO.getAgeRange (@age int) --Recibe una edad por par�metro y 
 RETURNS varchar(10)								  --devuelve el rango de edad al que pertenece.	
 AS
     BEGIN
@@ -539,19 +540,20 @@ GO
 CREATE PROCEDURE BI_migrar_compras
 AS
     BEGIN
-    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Compras (id_material, id_tiempo, id_ubicacion, nro_sucursal, cantidad_compras, promedio_precio_compras)
+    INSERT INTO LA_SELECT_NO_MURIO.BI_Fact_Compras (id_material, id_tiempo, id_ubicacion, nro_sucursal, cantidad_compras, promedio_precio_compras, importe_total_material)
     SELECT dc.codigo_material, dt.id_tiempo,   (SELECT du.id_ubicacion FROM LA_SELECT_NO_MURIO.sucursal suc
         JOIN LA_SELECT_NO_MURIO.localidad loc ON loc.nro_localidad = suc.nro_localidad 
         JOIN LA_SELECT_NO_MURIO.provincia prov ON prov.nro_provincia = loc.nro_provincia 
         JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.localidad = loc.nombre_localidad AND du.provincia = prov.nombre_provincia
         WHERE suc.nro_sucursal = com.nro_sucursal ),
     com.nro_sucursal,
-    SUM(dc.detalle_compra_cantidad), (SUM(dc.detalle_compra_precio * dc.detalle_compra_cantidad) / SUM(DC.detalle_compra_cantidad))
+    SUM(dc.detalle_compra_cantidad), (SUM(dc.detalle_compra_precio * dc.detalle_compra_cantidad) / SUM(DC.detalle_compra_cantidad)),
+    SUM(dc.detalle_compra_subtotal)
     FROM LA_SELECT_NO_MURIO.compra com 
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.anio = YEAR(com.fecha_compra) AND
     dt.mes = MONTH(com.fecha_compra) AND dt.cuatrimestre = LA_SELECT_NO_MURIO.obtener_cuatrimestre(com.fecha_compra)
     JOIN LA_SELECT_NO_MURIO.detalle_compra dc ON dc.nro_compra = com.nro_compra
-    GROUP BY dc.codigo_material, dt.id_tiempo, dt.id_tiempo, com.nro_sucursal
+    GROUP BY dc.codigo_material, dt.id_tiempo, com.nro_sucursal
     END
 GO
 
@@ -610,9 +612,25 @@ GO
 
 CREATE OR ALTER VIEW LA_SELECT_NO_MURIO.vista_ganancias
 AS
-    SELECT fv.nro_sucursal,  dt.mes, (SUM(fv.precio_promedio_venta*fv.cantidad)-SUM(fc.promedio_precio_compras)) 'Ganancias'
-	FROM LA_SELECT_NO_MURIO.BI_Fact_Venta fv JOIN LA_SELECT_NO_MURIO.BI_Fact_Compras fc ON fv.nro_sucursal = fc.nro_sucursal  and FC.id_tiempo = fv.id_tiempo
-											JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.id_tiempo = fv.id_tiempo 
+	WITH ComprasAgrupadas AS (
+    SELECT 
+        id_tiempo,
+        nro_sucursal,
+        SUM(cantidad_compras) AS total_cantidad_compras,
+        SUM(cantidad_compras * promedio_precio_compras) AS total_monto_compras
+    FROM LA_SELECT_NO_MURIO.BI_Fact_Compras
+    GROUP BY id_tiempo, nro_sucursal
+	)
+	SELECT 
+		fv.nro_sucursal,
+		dt.mes,
+		SUM(fv.precio_promedio_venta * fv.cantidad) - 
+		ISNULL(SUM(ca.total_monto_compras), 0) AS Ganancias
+	FROM LA_SELECT_NO_MURIO.BI_Fact_Venta fv
+	LEFT JOIN ComprasAgrupadas ca 
+		ON fv.id_tiempo = ca.id_tiempo AND fv.nro_sucursal = ca.nro_sucursal
+	JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt 
+		ON dt.id_tiempo = fv.id_tiempo
 	GROUP BY fv.nro_sucursal, dt.mes
 GO     
 
@@ -634,17 +652,40 @@ IF EXISTS (SELECT name FROM sys.views WHERE name = 'vista_rendimiento_modelos' )
     DROP VIEW LA_SELECT_NO_MURIO.vista_rendimiento_modelos
 GO
 
--- Segun localidad y rango etario (top 3)
-CREATE VIEW LA_SELECT_NO_MURIO.vista_rendimiento_modelos
+
+CREATE OR ALTER VIEW LA_SELECT_NO_MURIO.vista_rendimiento_modelos
 AS
-    SELECT TOP 3 SUM(fv.precio_promedio_venta * fv.cantidad) 'Modelo con mayores ventas', dt.cuatrimestre, cli.rango_etario, fv.nro_sucursal, du.localidad 
-    FROM LA_SELECT_NO_MURIO.BI_Fact_Venta fv 
-        JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON dt.id_tiempo = fv.id_tiempo
-        JOIN LA_SELECT_NO_MURIO.BI_Dim_Cliente cli ON cli.id_cliente = fv.id_cliente 
-        JOIN LA_SELECT_NO_MURIO.BI_Dim_Modelo_Sillon ms ON ms.id_sillon_modelo = fv.id_sillon_modelo
-        JOIN LA_SELECT_NO_MURIO.BI_Dim_Ubicacion du ON du.id_ubicacion = fv.id_ubicacion
-    GROUP BY dt.cuatrimestre, cli.rango_etario, fv.nro_sucursal, du.localidad 
-    ORDER BY SUM(fv.precio_promedio_venta * fv.cantidad) desc
+    SELECT 
+    anio,
+    cuatrimestre,
+    Localidad,
+    rango_etario,
+    sillon_modelo_nombre
+    FROM (
+        SELECT 
+            t.anio,
+            t.cuatrimestre,
+            u.Localidad,
+            c.rango_etario,
+            m.sillon_modelo_nombre,
+            SUM(fv.cantidad) AS total_vendido,
+            ROW_NUMBER() OVER (
+                PARTITION BY t.anio , t.cuatrimestre, u.Localidad, c.rango_etario
+                ORDER BY SUM(fv.cantidad) DESC
+            ) AS ranking_3
+        FROM LA_SELECT_NO_MURIO.BI_Fact_venta fv
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_modelo_sillon m ON fv.id_sillon_modelo = m.id_sillon_modelo
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_tiempo t ON fv.id_tiempo = t.id_tiempo
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_cliente c ON fv.id_cliente = c.id_cliente
+        JOIN LA_SELECT_NO_MURIO.BI_Dim_ubicacion u ON fv.id_ubicacion = u.id_ubicacion
+        GROUP BY 
+            t.anio,
+            t.cuatrimestre,
+            u.Localidad,
+            c.rango_etario,
+            m.sillon_modelo_nombre
+    ) as ventas_top3 
+    WHERE ranking_3 <= 3
 GO        
 
 
@@ -691,16 +732,16 @@ GO
 CREATE VIEW LA_SELECT_NO_MURIO.vista_tiempo_promedio_fabricacion 
 AS
     SELECT
-        AVG(pedidos.tiempo_promedio_dia) AS Tiempopromedio,
+        AVG(pedidos.tiempo_promedio_dia) AS Tiempo_promedio,
         tiempo_pedido.cuatrimestre AS cuatrimestre,
-        tiempo_pedido.anio AS anio
+        pedidos.nro_sucursal AS sucursal
     FROM
         LA_SELECT_NO_MURIO.BI_Fact_Pedidos AS pedidos
     JOIN
         LA_SELECT_NO_MURIO.BI_Dim_tiempo AS tiempo_pedido ON pedidos.id_tiempo = tiempo_pedido.id_tiempo
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Estado est ON est.id_estado = pedidos.estado 
     WHERE est.estado_nombre = 'ENTREGADO'
-    GROUP BY tiempo_pedido.anio, tiempo_pedido.cuatrimestre
+    GROUP BY tiempo_pedido.cuatrimestre, pedidos.nro_sucursal
 GO
 
 
@@ -731,7 +772,7 @@ AS
         dt.cuatrimestre,
         tm.material_tipo,
         suc.nro_sucursal,
-        SUM(fc.promedio_precio_compras*fc.cantidad_compras) AS importe_total_material
+        SUM(fc.importe_total_material) AS importe_total_material
     FROM LA_SELECT_NO_MURIO.BI_Fact_Compras fc 
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tiempo dt ON fc.id_tiempo = dt.id_tiempo
     JOIN LA_SELECT_NO_MURIO.BI_Dim_Tipo_Material tm ON tm.id_material = fc.id_material
